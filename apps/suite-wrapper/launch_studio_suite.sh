@@ -12,6 +12,23 @@ set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../.. && pwd)"
 
+# Same class of bug as ffprobe_util.py's _ensure_common_ffmpeg_dirs_on_path()
+# (see this repo's suite-wrapper CLAUDE.md "GUI-launch gotchas"): a process
+# launched via Finder/Dock/`open` (as opposed to a Terminal shell) gets a
+# minimal PATH that doesn't include Homebrew's bin dir -- that's normally
+# added by .zshrc/.zprofile, which only load for interactive shells. `uv`
+# is genuinely installed (`brew install uv`), but without this the packaged
+# .app fails at this exact line with "uv: command not found" even though
+# the identical script works fine run directly from a terminal. Only ever
+# APPENDS known install locations that exist and aren't already present --
+# never removes or reorders anything already on PATH.
+for dir in /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin /opt/local/bin; do
+    if [ -d "$dir" ] && [[ ":$PATH:" != *":$dir:"* ]]; then
+        PATH="$PATH:$dir"
+    fi
+done
+export PATH
+
 echo "[suite] Syncing the shared workspace venv (uv sync)..."
 # Deliberately a FULL workspace sync, not `--package suite-wrapper`. This is
 # one shared venv across every app (see paths.py's SHARED_VENV_PYTHON) --
