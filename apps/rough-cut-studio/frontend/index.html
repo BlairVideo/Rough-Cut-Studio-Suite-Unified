@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Rough Cut Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <!-- Signature element: a film-ruler strip with tick marks, ticks
+         through timecode while Gemini is generating -->
+    <header class="ruler" id="ruler">
+      <div class="ruler__ticks" id="rulerTicks" aria-hidden="true"></div>
+      <div class="ruler__title">
+        <span class="ruler__mark">●</span> ROUGH CUT STUDIO
+      </div>
+      <div class="ruler__tc" id="rulerTc">00:00:00:00</div>
+    </header>
+
+    <div class="recovery-banner" id="recoveryBanner" hidden>
+      <span id="recoveryBannerText"></span>
+      <div class="recovery-banner__actions">
+        <button class="btn btn--primary" id="btnRestoreAutosave">Restore</button>
+        <button class="btn btn--ghost" id="btnDiscardAutosave">Discard</button>
+      </div>
+    </div>
+
+    <div class="layout">
+
+      <!-- LEFT: sources + settings -->
+      <aside class="panel panel--side">
+
+        <section class="block">
+          <h2 class="block__title">00 — Project</h2>
+          <div class="button-row">
+            <button class="btn btn--ghost" id="btnNewProject">+ New Project</button>
+            <button class="btn btn--ghost" id="btnSaveProject">Save Project…</button>
+            <button class="btn btn--ghost" id="btnLoadProject">Load Project…</button>
+          </div>
+        </section>
+
+        <section class="block">
+          <h2 class="block__title">01 — Sources</h2>
+          <p class="block__hint">Upload timecoded transcripts (.srt, .vtt, .txt). Each becomes a source you can pull cuts from. If a transcript embeds its source video (or a same-named video file sits next to it), it's linked automatically.</p>
+          <div class="button-row">
+            <button class="btn btn--ghost" id="btnAddTranscript">+ Add Transcript</button>
+            <button class="btn btn--ghost" id="btnBatchRelink" title="Point at a folder once to auto-link every unlinked source by filename">Batch Relink…</button>
+          </div>
+          <ul class="source-list" id="sourceList"></ul>
+        </section>
+
+        <section class="block">
+          <h2 class="block__title">02 — Sequence Settings</h2>
+          <label class="field">
+            <span>Sequence name</span>
+            <input type="text" id="sequenceName" placeholder="e.g. Spring Campaign Cut 1" />
+          </label>
+          <label class="field">
+            <span>Frame rate</span>
+            <select id="fps">
+              <option value="23.976">23.976 fps</option>
+              <option value="24">24 fps</option>
+              <option value="25" selected>25 fps</option>
+              <option value="29.97">29.97 fps</option>
+              <option value="30">30 fps</option>
+              <option value="50">50 fps</option>
+              <option value="59.94">59.94 fps</option>
+            </select>
+          </label>
+          <label class="checkbox" id="dropFrameRow" hidden>
+            <input type="checkbox" id="dropFrame" />
+            <span>Drop-frame timecode (matches camera clock at 29.97/59.94 fps; display only — doesn't change the edit)</span>
+          </label>
+        </section>
+
+        <section class="block">
+          <h2 class="block__title">03 — Sequences</h2>
+          <p class="block__hint">Save the current cut as a named version — e.g. "Social Cut", "Broadcast Cut" — to keep more than one edit of this sequence in the same project, all sharing the same sources and media links. This names a saved <em>version</em>, not the sequence itself (that's "Sequence name" above).</p>
+          <div class="button-row">
+            <input type="text" id="sequenceSaveName" placeholder="Version name" aria-label="Version name" />
+            <button class="btn btn--ghost" id="btnSaveSequence">Save Current</button>
+          </div>
+          <ul class="sequence-list" id="sequenceList"></ul>
+        </section>
+
+        <section class="block">
+          <h2 class="block__title">04 — LLM Provider</h2>
+          <p class="block__hint">Switch providers or models whenever you like — Generate, Revise, and every future generation in this session always use whatever's selected here at the moment you click.</p>
+          <label class="field">
+            <span>Provider</span>
+            <select id="provider">
+              <option value="gemini" selected>Gemini (cloud API)</option>
+              <option value="llama">Llama — local via Ollama</option>
+            </select>
+          </label>
+
+          <div id="geminiSettings">
+            <label class="field">
+              <span>API key <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">(get a free key)</a></span>
+              <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off" />
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="rememberKey" />
+              <span>Remember key on this machine (stored in plain text in a local <code>.env</code> file)</span>
+            </label>
+            <label class="field">
+              <span>Gemini model</span>
+              <select id="model">
+                <option value="gemini-flash-latest" selected>Gemini Flash — latest (auto-updated, recommended)</option>
+                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (slower, higher quality)</option>
+                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (fastest, lowest quota use)</option>
+              </select>
+              <span class="field__note">If one model is overloaded, switching here and regenerating often works around it.</span>
+            </label>
+          </div>
+
+          <div id="llamaSettings" hidden>
+            <label class="field">
+              <span>Ollama URL</span>
+              <input type="text" id="ollamaHost" placeholder="http://localhost:11434" value="http://localhost:11434" />
+              <span class="field__note">Ollama must be installed and running locally. No API key and no internet connection needed — the transcript never leaves this machine.</span>
+            </label>
+            <label class="field">
+              <span>Llama model</span>
+              <div class="button-row">
+                <select id="llamaModel"></select>
+                <button class="btn btn--ghost" id="btnRefreshLlamaModels" title="List models already pulled with `ollama pull`">Refresh</button>
+              </div>
+              <span class="field__note" id="llamaModelHint">Pull a model from a terminal first, e.g. <code>ollama pull llama3.1</code>, then click Refresh.</span>
+            </label>
+          </div>
+        </section>
+
+      </aside>
+
+      <!-- RIGHT: prompt + output -->
+      <main class="panel panel--main">
+
+        <section class="block block--compact">
+          <h2 class="block__title">05 — Creative Brief</h2>
+          <textarea id="prompt" rows="3" placeholder="Describe the video you want. e.g. &quot;Cut a 60-second recap for our March shoot focused on the crew's energy despite the rain, ending on the golden-light moment.&quot;"></textarea>
+          <label class="field field--inline">
+            <span>Target duration <em>(optional)</em></span>
+            <input type="text" id="targetDuration" placeholder="e.g. 60 or 1:30" size="10" />
+          </label>
+          <button class="btn btn--primary" id="btnGenerate">Generate Script</button>
+          <div class="status" id="status" role="status" aria-live="polite"></div>
+          <div class="duration-meter" id="durationMeter" hidden></div>
+        </section>
+
+        <section class="block block--output" id="outputBlock" hidden>
+          <div class="tabs" role="tablist">
+            <button class="tab is-active" id="tabBtnScript" data-tab="script" role="tab" aria-selected="true" aria-controls="tabScript">Script</button>
+            <button class="tab" id="tabBtnEdit" data-tab="edit" role="tab" aria-selected="false" aria-controls="tabEdit">Cuts</button>
+            <button class="tab" id="tabBtnExport" data-tab="export" role="tab" aria-selected="false" aria-controls="tabExport">Export</button>
+            <button class="tab" id="tabBtnHistory" data-tab="history" role="tab" aria-selected="false" aria-controls="tabHistory">History</button>
+          </div>
+
+          <div class="tab-panel is-active" id="tabScript" role="tabpanel" aria-labelledby="tabBtnScript">
+            <div class="script-preview" id="scriptPreview"></div>
+            <div class="button-row">
+              <button class="btn btn--secondary" id="btnSaveScript">Save Script…</button>
+              <button class="btn btn--ghost" id="btnExportVideoPreview" title="Renders the main track's cuts into one video file (no B-roll — see the README)">Export Video Preview…</button>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="tabEdit" role="tabpanel" aria-labelledby="tabBtnEdit">
+            <p class="block__hint">Drag rows (or use ▲▼ / Alt+↑↓) to reorder, retime, edit, duplicate (⧉), or delete cuts, then apply — no need to regenerate from scratch. Use the Source/Track filter above the table to narrow a long list. Select multiple rows with the checkboxes for bulk delete or track changes. Ctrl/Cmd+Z undoes the last change to this list, including a committed timecode edit. Set a cut to "B-Roll" to lay it over the main track's audio at a specific point instead of cutting to it — an overlapping B-roll clip is flagged right on the row. Click a thumbnail to preview that cut — then use Set In/Set Out to retime it from the playhead — or use "Preview Script" to play every main cut back-to-back in order.</p>
+            <div class="revise-bar">
+              <input type="text" id="reviseInstruction" placeholder="Ask the model to revise the main cut, e.g. &quot;make the opening punchier&quot; or &quot;trim to fit the target better&quot;" aria-label="Revision instruction" />
+              <button class="btn btn--secondary" id="btnRevise">Revise</button>
+              <button class="btn btn--ghost" id="btnPreviewScript">▶ Preview Script</button>
+            </div>
+            <div class="cuts-layout">
+              <div class="preview-player" id="previewPlayer" hidden>
+                <div class="preview-player__header">
+                  <span class="preview-player__title">Preview</span>
+                  <button class="preview-player__close" id="btnClosePreview" title="Close preview">✕</button>
+                </div>
+                <video id="previewVideo" controls></video>
+                <div class="preview-info">
+                  <div class="preview-info__row">
+                    <span class="preview-info__label">Source</span>
+                    <span class="preview-info__value" id="previewSource"></span>
+                  </div>
+                  <div class="preview-info__row">
+                    <span class="preview-info__label">In &rarr; Out</span>
+                    <span class="preview-info__value" id="previewInOut"></span>
+                  </div>
+                  <div class="preview-info__row" id="previewTrackRow" hidden>
+                    <span class="preview-info__label">Track</span>
+                    <span class="preview-info__value" id="previewTrack"></span>
+                  </div>
+                </div>
+                <div class="preview-inout-actions">
+                  <button class="btn btn--ghost" id="btnSetIn" title="Set this cut's in point to the current playhead position">Set In</button>
+                  <button class="btn btn--ghost" id="btnSetOut" title="Set this cut's out point to the current playhead position">Set Out</button>
+                </div>
+                <label class="field">
+                  <span>Editorial note</span>
+                  <textarea id="previewNote" rows="2" placeholder="What happens in this cut…"></textarea>
+                </label>
+              </div>
+              <div class="cuts-main">
+                <div class="cuts-toolbar" id="cutsToolbar">
+                  <label class="field field--inline">
+                    <span>Source</span>
+                    <select id="cutsFilterSource"><option value="all">All sources</option></select>
+                  </label>
+                  <label class="field field--inline">
+                    <span>Track</span>
+                    <select id="cutsFilterTrack">
+                      <option value="all">All</option>
+                      <option value="main">Main only</option>
+                      <option value="broll">B-Roll only</option>
+                    </select>
+                  </label>
+                  <div class="cuts-stats" id="cutsStats" role="status" aria-live="polite"></div>
+                </div>
+                <div class="bulk-actions" id="bulkActions" hidden>
+                  <span class="bulk-actions__count" id="bulkCount"></span>
+                  <select id="bulkTrackSelect" aria-label="Track for selected cuts">
+                    <option value="main">Main (V1)</option>
+                    <option value="broll">B-Roll (V2)</option>
+                  </select>
+                  <button class="btn btn--ghost" id="btnBulkSetTrack">Set Track</button>
+                  <button class="btn btn--ghost" id="btnBulkDelete">Delete Selected</button>
+                </div>
+                <div class="edit-table-wrap">
+                  <table class="edit-table">
+                    <colgroup>
+                      <col style="width: 30px;">
+                      <col style="width: 78px;">
+                      <col style="width: 84px;">
+                      <col style="width: 120px;">
+                      <col style="width: 150px;">
+                      <col style="width: 122px;">
+                      <col style="width: 122px;">
+                      <col style="width: 130px;">
+                      <col style="width: 150px;">
+                      <col style="width: 200px;">
+                      <col>
+                      <col style="width: 160px;">
+                      <col style="width: 30px;">
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th><input type="checkbox" id="selectAllRows" title="Select all" aria-label="Select all cuts"></th>
+                        <th></th>
+                        <th>Preview</th>
+                        <th>Track</th>
+                        <th>Source</th>
+                        <th>In</th>
+                        <th>Out</th>
+                        <th>Timeline Start</th>
+                        <th>B-Roll Audio</th>
+                        <th>Script Text</th>
+                        <th>Editorial note</th>
+                        <th>On-screen text</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="editTableBody"></tbody>
+                  </table>
+                </div>
+                <div class="button-row">
+                  <button class="btn btn--ghost" id="btnUndo" title="Ctrl/Cmd+Z">↶ Undo</button>
+                  <button class="btn btn--ghost" id="btnRedo" title="Ctrl/Cmd+Shift+Z">↷ Redo</button>
+                  <button class="btn btn--ghost" id="btnAddCutRow">+ Add cut</button>
+                  <button class="btn btn--primary" id="btnApplyEdits">Apply Changes</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="tabExport" role="tabpanel" aria-labelledby="tabBtnExport">
+            <div class="export-format-tabs" id="exportFormatTabs" role="tablist">
+              <button class="export-format-tab is-active" id="exportFormatTabXmeml" data-format="xmeml" role="tab" aria-selected="true" aria-controls="exportPreview">Premiere Pro XML</button>
+              <button class="export-format-tab" id="exportFormatTabFcpxml" data-format="fcpxml" role="tab" aria-selected="false" aria-controls="exportPreview">Final Cut Pro XML</button>
+              <button class="export-format-tab" id="exportFormatTabOtio" data-format="otio" role="tab" aria-selected="false" aria-controls="exportPreview">OTIO</button>
+            </div>
+            <pre class="xml-preview" id="exportPreview" role="tabpanel" aria-labelledby="exportFormatTabXmeml"></pre>
+            <button class="btn btn--secondary" id="btnSaveExport">Save Premiere Pro XML…</button>
+          </div>
+
+          <div class="tab-panel" id="tabHistory" role="tabpanel" aria-labelledby="tabBtnHistory">
+            <p class="block__hint">Every generation, edit, and revision this session, newest first. Restoring a past version makes it the active one for editing and export — it doesn't overwrite anything, just adds a new "Restored" entry. Check two entries to compare their main cut lists.</p>
+            <div class="button-row">
+              <button class="btn btn--ghost" id="btnCompareHistory" disabled>Compare Selected (0/2)</button>
+            </div>
+            <ul class="history-list" id="historyList"></ul>
+            <div class="history-compare" id="historyCompare" hidden>
+              <div class="history-compare__header">
+                <div class="history-compare__side">
+                  <span class="history-compare__tag history-compare__tag--a">A</span>
+                  <span id="compareLabelA"></span>
+                </div>
+                <div class="history-compare__side">
+                  <span class="history-compare__tag history-compare__tag--b">B</span>
+                  <span id="compareLabelB"></span>
+                </div>
+                <button class="preview-player__close" id="btnCloseCompare" title="Close comparison">✕</button>
+              </div>
+              <div class="history-compare__rows" id="compareRows"></div>
+            </div>
+          </div>
+
+          <div class="warnings" id="warnings"></div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="transcriptModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="transcriptModalTitle" tabindex="-1">
+      <div class="modal__header">
+        <span id="transcriptModalTitle">Transcript</span>
+        <button class="preview-player__close" id="btnCloseTranscriptModal" title="Close" aria-label="Close transcript">✕</button>
+      </div>
+      <div class="modal__body">
+        <table class="transcript-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Speaker</th>
+              <th>Text</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="transcriptModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

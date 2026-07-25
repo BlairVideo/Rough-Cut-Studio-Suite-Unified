@@ -1,0 +1,21 @@
+[project]
+name = "suite-wrapper"
+version = "0.1.0"
+description = "The unified wrapper -- one pywebview window combining every workspace, with background jobs so heavy tasks (transcription, analysis, rendering) run simultaneously without blocking each other."
+requires-python = ">=3.13"
+dependencies = [
+    "pywebview==6.2.1",
+    "requests==2.34.2",
+    "Pillow==12.3.0",
+    "keyring==25.7.0",
+    # fast multithreaded hashing for card-eater's copy verification (bridged
+    # in-process, not a subprocess worker -- see apps/card-eater in Phase 2)
+    "blake3==1.0.9",
+    "rcs-utils",
+]
+
+[tool.uv.sources]
+rcs-utils = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest"]

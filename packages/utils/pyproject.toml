@@ -1,0 +1,13 @@
+[project]
+name = "rcs-utils"
+version = "0.1.0"
+description = "Shared Python utilities for the Rough Cut Studio Suite apps. Confirmed-duplication only -- see ../../migration-plan.md for the extraction criteria used (byte-identical diff/md5, not assumed similarity)."
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rcs_utils"]

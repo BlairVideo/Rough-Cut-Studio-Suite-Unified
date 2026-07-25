@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B-Roll Analyzer -- UI Reference</title>
+<style>
+/* ======================================================================
+   B-Roll Analyzer -- static HTML/CSS/JS reference of the Tkinter app's
+   current UI, for sharing with people who don't have the Python app
+   running (design review, a starting point for a web version, etc.).
+
+   This is a REFERENCE, not a pixel-perfect clone: it reproduces the
+   real color/type tokens and layout structure from app.py's BRAND dict
+   and widget layout, and fakes enough interactivity (row selection,
+   segment-chip playback state, column sorting) to demonstrate how the
+   real app behaves -- but nothing here reads real video files or runs
+   real analysis. Swap SAMPLE_CLIPS below for your own data, or wire
+   the click handlers up to a real backend.
+
+   Deliberately zero external dependencies (no CDN fonts, no JS
+   libraries) -- open this file directly in a browser, no build step,
+   no network access required, consistent with the Python app's own
+   fully-offline design.
+   ======================================================================= */
+
+:root {
+  /* Exact hex values from app.py's BRAND dict -- see that file for the
+     Pantone (PMS) reference numbers from Blair's 2025 Graphic &
+     Editorial Style Guide each one is derived from. */
+  --bg:            #1e2224; /* Dark Blair grey -- Cool Grey (PMS 430) darkened */
+  --surface:       #272c2f; /* panels, table body */
+  --surface-alt:   #33393d; /* inputs, hover/alternating surfaces */
+  --border:        #41494e; /* subtle dividers on dark surfaces */
+  --blair-blue:    #004b8d; /* PMS 288 -- primary buttons, header banner */
+  --dark-blue:     #093266; /* PMS 534 -- table headings */
+  --sky:           #5f8fb4; /* PMS 7454 (secondary) -- hover/active accent */
+  --cool-grey:     #a3a7ac; /* PMS 430, lightened for legible on-dark text */
+  --text:          #e9e7e5; /* Web Grey 1 -- primary text on dark surfaces */
+  --orange:        #f15d22; /* PMS 1665 -- sparing highlight only */
+  --red:           #da1a32; /* PMS 186 (secondary) -- failed/error state */
+  --yellow:        #dd971a; /* PMS 131 (secondary) -- warning state */
+  --white:         #ffffff;
+  /* Muted full-row tints: real Red/Yellow blended toward --surface at
+     ~35%, same as _blend_hex() in app.py -- full-saturation Red/Yellow
+     across an entire row is too loud for something you look at a while. */
+  --red-row:       #443036;
+  --yellow-row:    #4c4530;
+
+  /* Style Guide "Website Fonts": Proxima Nova (body) + Bree Serif
+     (headings). Both are licensed/non-system fonts the real app
+     detects at runtime and falls back from -- do the same here rather
+     than pulling either from a font CDN, so this file stays a
+     zero-dependency, open-anywhere reference. Swap in real @font-face
+     rules if you have licensed font files to hand. */
+  --font-body: "Proxima Nova", "Avenir Next LT Pro", "Avenir", "Helvetica Neue",
+               "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-heading: "Bree Serif", Georgia, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- Header ---------- */
+.header {
+  background: var(--blair-blue);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  flex: 0 0 auto;
+}
+.seal {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--blair-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 20px;
+  flex: 0 0 auto;
+  /* Stand-in for Blair's official seal mark (embedded as base64 image
+     data in the real app.py) -- swap this for an <img> of the actual
+     seal; use of Blair's seal itself requires Communications sign-off
+     per the Style Guide, same as the real app's own header comment
+     notes. */
+}
+.header h1 {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 400;
+  margin: 0;
+}
+.header .subtitle {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+/* ---------- Toolbar ---------- */
+.toolbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+.field-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cool-grey);
+}
+.field-group input[type="number"] {
+  width: 52px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.field-group input[type="checkbox"] { accent-color: var(--sky); }
+
+button {
+  font-family: var(--font-body);
+  font-size: 13px;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.btn-primary { background: var(--blair-blue); color: var(--white); }
+.btn-primary:hover { background: var(--sky); }
+.btn-secondary { background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
+.btn-issues { background: var(--orange); color: var(--white); }
+.btn-issues:hover { filter: brightness(1.1); }
+.btn-issues:disabled { background: var(--surface-alt); color: var(--cool-grey); cursor: default; }
+
+.folder-path {
+  font-size: 12px;
+  color: var(--cool-grey);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+/* ---------- Main content row ---------- */
+.content {
+  flex: 1 1 auto;
+  display: flex;
+  overflow: hidden;
+  padding: 14px;
+  gap: 14px;
+}
+
+/* ---------- Preview panel (left) ---------- */
+.preview-panel {
+  width: 340px;
+  flex: 0 0 340px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.preview-panel h2 {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 15px;
+  margin: 0 0 6px 0;
+}
+.preview-video {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cool-grey);
+  font-size: 13px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+}
+.preview-video.playing::after {
+  content: "\25B6 Playing";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0,0,0,0.6);
+  color: var(--white);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.preview-info { margin-top: 10px; }
+.preview-title { font-weight: 700; font-size: 14px; }
+.preview-meta, .preview-segment {
+  color: var(--cool-grey);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.preview-segment.playing { color: var(--sky); font-weight: 700; }
+
+.segments-label {
+  color: var(--cool-grey);
+  font-size: 12px;
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+.segment-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: var(--blair-blue);
+  color: var(--white);
+  border: none;
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip:hover { background: var(--sky); }
+.chip.active { background: var(--sky); font-weight: 700; }
+
+.preview-controls {
+  display: none;
+  gap: 6px;
+  margin-top: 12px;
+}
+.preview-controls.visible { display: flex; }
+
+/* ---------- Table (right) ---------- */
+.table-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.table-hints {
+  color: var(--cool-grey);
+  font-size: 11.5px;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+.table-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+table { width: 100%; border-collapse: collapse; background: var(--surface); }
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--dark-blue);
+  color: var(--white);
+  text-align: left;
+  font-weight: 400;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+thead th.sortable { cursor: pointer; }
+thead th.sortable:hover { background: var(--sky); }
+thead th .arrow { font-size: 10px; margin-left: 4px; opacity: 0.8; }
+tbody td {
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  vertical-align: middle;
+}
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--surface-alt); }
+tbody tr.selected td { background: var(--sky); color: var(--white); }
+tbody tr.selected .chip:not(.active) { background: var(--blair-blue); }
+tbody tr.low-score td { background: var(--red-row); }
+tbody tr.energy-fallback td { background: var(--yellow-row); }
+tbody tr.selected.low-score td,
+tbody tr.selected.energy-fallback td { background: var(--sky); }
+
+.col-rank, .col-thumb { text-align: center; width: 1%; white-space: nowrap; }
+.col-score, .col-energy, .col-duration { text-align: center; }
+.thumb-icon {
+  width: 34px; height: 20px;
+  border-radius: 3px;
+  background: linear-gradient(135deg, var(--border), var(--surface-alt));
+  display: inline-block;
+}
+.segments-cell { display: flex; flex-wrap: wrap; gap: 4px; }
+.segments-cell .chip { padding: 4px 8px; font-size: 11.5px; }
+
+/* ---------- Bottom bar ---------- */
+.bottom-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  flex: 0 0 auto;
+}
+.status-text { color: var(--cool-grey); font-size: 12.5px; }
+.bottom-actions { display: flex; gap: 8px; }
+
+/* Scrollbar styling kept subtle/dark to match the rest of the theme */
+.table-scroll::-webkit-scrollbar, .preview-panel::-webkit-scrollbar { width: 10px; }
+.table-scroll::-webkit-scrollbar-thumb, .preview-panel::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 5px;
+}
+.table-scroll::-webkit-scrollbar-track, .preview-panel::-webkit-scrollbar-track { background: var(--surface); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="seal">B</div>
+  <div>
+    <h1>B-Roll Analyzer</h1>
+    <div class="subtitle">Blair Academy &mdash; Video Editorial Tools</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button class="btn-primary" onclick="alert('Reference UI only \u2014 wire this up to your own folder picker.')">Select Folder&hellip;</button>
+  <span class="folder-path" id="folderPath">/Users/cj/Movies/Fall_Sports_BRoll</span>
+  <button class="btn-primary" onclick="alert('Reference UI only \u2014 wire this up to your own analysis pipeline.')">Analyze</button>
+
+  <span class="field-group"><input type="checkbox" id="energyToggle" checked> Detect high-energy shots</span>
+  <span class="field-group">Energy weight <input type="number" value="35" min="0" max="100"></span>
+  <span class="field-group">Segment length (s) <input type="number" value="4" min="1" max="30"></span>
+  <span class="field-group">Segments per clip <input type="number" value="1" min="1" max="10"></span>
+  <span class="field-group">Score above <input type="number" value="50" min="0" max="100"></span>
+</div>
+
+<div class="content">
+  <div class="preview-panel">
+    <h2>Preview</h2>
+    <div class="preview-video" id="previewVideo">Select a clip<br>to preview</div>
+    <div class="preview-info">
+      <div class="preview-title" id="previewTitle"></div>
+      <div class="preview-meta" id="previewMeta"></div>
+      <div class="preview-segment" id="previewSegment"></div>
+    </div>
+    <div class="segments-label">Segments</div>
+    <div class="segment-chips" id="previewChips"></div>
+    <div class="preview-controls" id="previewControls">
+      <button class="btn-secondary" id="replayBtn">&#8634; Replay</button>
+      <button class="btn-secondary" id="thumbBtn">Show Thumbnail</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-hints">
+      Click "Clip", "Score", or "Energy" column headers to sort. Select a row to preview its best segment.<br>
+      Click a &#9654; time range &mdash; in the Segments column here, or under the video on the left &mdash; to play just that segment in the Preview panel.<br>
+      Rows tinted red score below the "Score above" value; yellow means energy scoring wasn't available for that clip.
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th class="col-thumb"></th>
+            <th class="sortable" data-sort="name">Clip <span class="arrow"></span></th>
+            <th class="sortable col-score" data-sort="score">Score <span class="arrow"></span></th>
+            <th class="sortable col-energy" data-sort="energy">Energy <span class="arrow"></span></th>
+            <th class="col-duration">Duration (s)</th>
+            <th>Segments</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <span class="status-text" id="statusText">6 clips analyzed &middot; 1 flagged</span>
+  <div class="bottom-actions">
+    <button class="btn-issues" id="issuesBtn">View Issues (1)</button>
+    <button class="btn-primary" onclick="alert('Reference UI only \u2014 wire this up to your own XML export.')">Export Premiere XML&hellip;</button>
+  </div>
+</div>
+
+<script>
+/* ----------------------------------------------------------------------
+   Sample data + interaction logic. Swap SAMPLE_CLIPS for your own, or
+   replace renderTable/selectClip/playSegment with real API calls --
+   the DOM structure and CSS classes are the contract to keep.
+   ------------------------------------------------------------------- */
+
+const SAMPLE_CLIPS = [
+  { name: "sideline_wide_01.mp4", score: 92.4, energy: 88, duration: 14.2, status: "ok",
+    segments: [{start: 2.0, end: 6.0}, {start: 9.5, end: 13.5}] },
+  { name: "huddle_closeup.mp4", score: 87.1, energy: 74, duration: 8.0, status: "ok",
+    segments: [{start: 0.0, end: 4.0}] },
+  { name: "crowd_reaction.mp4", score: 81.6, energy: 95, duration: 6.5, status: "ok",
+    segments: [{start: 1.2, end: 5.2}] },
+  { name: "coach_interview.mp4", score: 68.3, energy: null, duration: 22.0, status: "energy-fallback",
+    segments: [{start: 3.0, end: 7.0}, {start: 12.0, end: 16.0}] },
+  { name: "practice_drill_07.mp4", score: 54.9, energy: 41, duration: 11.3, status: "ok",
+    segments: [{start: 0.0, end: 4.0}] },
+  { name: "empty_field_pan.mp4", score: 31.2, energy: 12, duration: 9.8, status: "low-score",
+    segments: [{start: 0.0, end: 4.0}] },
+];
+
+const SCORE_THRESHOLD = 50;
+let sortKey = "score";
+let sortDesc = true;
+let selectedIndex = null;
+let activeChip = null; // {clipIndex, segIndex}
+
+function fmtSeg(seg) { return `\u25B6 ${seg.start.toFixed(1)}-${seg.end.toFixed(1)}s`; }
+
+function renderTable() {
+  const rows = [...SAMPLE_CLIPS.map((c, i) => ({...c, _idx: i}))].sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === "energy") { av = av === null ? -1 : av; bv = bv === null ? -1 : bv; }
+    if (typeof av === "string") return sortDesc ? bv.localeCompare(av) : av.localeCompare(bv);
+    return sortDesc ? bv - av : av - bv;
+  });
+
+  const tbody = document.getElementById("tableBody");
+  tbody.innerHTML = "";
+  rows.forEach((clip, displayRank) => {
+    const tr = document.createElement("tr");
+    tr.dataset.idx = clip._idx;
+    if (clip._idx === selectedIndex) tr.classList.add("selected");
+    if (clip.status === "low-score") tr.classList.add("low-score");
+    if (clip.status === "energy-fallback") tr.classList.add("energy-fallback");
+
+    const chipsHtml = clip.segments.map((seg, segIdx) => {
+      const isActive = activeChip && activeChip.clipIndex === clip._idx && activeChip.segIndex === segIdx;
+      return `<button class="chip${isActive ? " active" : ""}" data-clip="${clip._idx}" data-seg="${segIdx}">${fmtSeg(seg)}</button>`;
+    }).join("");
+
+    tr.innerHTML = `
+      <td class="col-rank">${displayRank + 1}</td>
+      <td class="col-thumb"><span class="thumb-icon"></span></td>
+      <td>${clip.name}</td>
+      <td class="col-score">${clip.score.toFixed(1)}</td>
+      <td class="col-energy">${clip.energy === null ? "-" : clip.energy.toFixed(0)}</td>
+      <td class="col-duration">${clip.duration.toFixed(1)}</td>
+      <td><div class="segments-cell">${chipsHtml}</div></td>
+    `;
+    tr.addEventListener("click", (e) => {
+      if (e.target.closest(".chip")) return; // handled by its own listener below
+      selectClip(clip._idx);
+    });
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll(".chip").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const clipIndex = parseInt(btn.dataset.clip, 10);
+      const segIndex = parseInt(btn.dataset.seg, 10);
+      selectClip(clipIndex, false);
+      playSegment(clipIndex, segIndex);
+    });
+  });
+
+  document.querySelectorAll("thead .arrow").forEach(a => a.textContent = "");
+  const activeHeader = document.querySelector(`thead th[data-sort="${sortKey}"] .arrow`);
+  if (activeHeader) activeHeader.textContent = sortDesc ? "\u25BC" : "\u25B2";
+}
+
+function selectClip(idx, resetToThumbnail = true) {
+  selectedIndex = idx;
+  const clip = SAMPLE_CLIPS[idx];
+  if (resetToThumbnail) {
+    activeChip = null;
+    document.getElementById("previewVideo").classList.remove("playing");
+    document.getElementById("previewVideo").innerHTML = `${clip.name}<br><span style="color:var(--cool-grey);font-size:11px;">(thumbnail placeholder)</span>`;
+    document.getElementById("previewSegment").classList.remove("playing");
+    document.getElementById("previewSegment").textContent =
+      `Best segment: ${fmtSeg(clip.segments[0]).replace("\u25B6 ", "")}`;
+    document.getElementById("previewControls").classList.remove("visible");
+  }
+  document.getElementById("previewTitle").textContent = clip.name;
+  document.getElementById("previewMeta").textContent =
+    `Score: ${clip.score.toFixed(1)}/100   Energy: ${clip.energy === null ? "-" : clip.energy.toFixed(0) + "/100"}   Duration: ${clip.duration.toFixed(1)}s`;
+
+  const chipsWrap = document.getElementById("previewChips");
+  chipsWrap.innerHTML = "";
+  clip.segments.forEach((seg, segIdx) => {
+    const btn = document.createElement("button");
+    const isActive = activeChip && activeChip.clipIndex === idx && activeChip.segIndex === segIdx;
+    btn.className = "chip" + (isActive ? " active" : "");
+    btn.textContent = fmtSeg(seg);
+    btn.addEventListener("click", () => playSegment(idx, segIdx));
+    chipsWrap.appendChild(btn);
+  });
+
+  renderTable();
+}
+
+function playSegment(clipIndex, segIndex) {
+  activeChip = { clipIndex, segIndex };
+  const clip = SAMPLE_CLIPS[clipIndex];
+  const seg = clip.segments[segIndex];
+
+  const video = document.getElementById("previewVideo");
+  video.classList.add("playing");
+  video.innerHTML = `${clip.name}<br><span style="color:var(--cool-grey);font-size:11px;">(segment playback placeholder)</span>`;
+
+  const segLabel = document.getElementById("previewSegment");
+  segLabel.classList.add("playing");
+  segLabel.textContent = `Playing: ${seg.start.toFixed(1)}s \u2013 ${seg.end.toFixed(1)}s`;
+
+  document.getElementById("previewControls").classList.add("visible");
+  renderTable();
+}
+
+document.getElementById("replayBtn").addEventListener("click", () => {
+  if (activeChip) playSegment(activeChip.clipIndex, activeChip.segIndex);
+});
+document.getElementById("thumbBtn").addEventListener("click", () => {
+  if (selectedIndex !== null) selectClip(selectedIndex, true);
+});
+
+document.querySelectorAll("thead th.sortable").forEach(th => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    if (sortKey === key) { sortDesc = !sortDesc; } else { sortKey = key; sortDesc = true; }
+    renderTable();
+  });
+});
+
+function updateStatus() {
+  const flagged = SAMPLE_CLIPS.filter(c => c.status !== "ok").length;
+  document.getElementById("statusText").textContent =
+    `${SAMPLE_CLIPS.length} clips analyzed \u00b7 ${flagged} flagged`;
+  const issuesBtn = document.getElementById("issuesBtn");
+  issuesBtn.textContent = `View Issues (${flagged})`;
+  issuesBtn.disabled = flagged === 0;
+  issuesBtn.addEventListener("click", () => {
+    if (flagged === 0) return;
+    const lines = SAMPLE_CLIPS.filter(c => c.status !== "ok")
+      .map(c => `${c.name}: ${c.status === "low-score" ? "below score threshold" : "energy scoring unavailable"}`);
+    alert("Flagged clips:\n\n" + lines.join("\n"));
+  });
+}
+
+renderTable();
+updateStatus();
+</script>
+
+</body>
+</html>

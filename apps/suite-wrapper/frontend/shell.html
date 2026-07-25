@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Rough Cut Studio Suite</title>
+{{RCS_HEAD_LINKS}}
+<link rel="stylesheet" href="{{SUITE_CSS_HREF}}" />
+</head>
+<body>
+
+  <!-- ================= Suite top bar ================= -->
+  <header id="suiteTopbar">
+    <div class="suite-brand">
+      <span class="suite-brand__mark">●</span>
+      ROUGH CUT STUDIO <span class="suite-brand__suite">SUITE</span>
+    </div>
+    <nav class="suite-ws-tabs" role="tablist" aria-label="Workspaces">
+      <button class="suite-ws-tab" data-ws="cardeater" role="tab" aria-selected="false">Copy</button>
+      <button class="suite-ws-tab" data-ws="sync" role="tab" aria-selected="false">Sync</button>
+      <button class="suite-ws-tab" data-ws="transcribe" role="tab" aria-selected="false">Transcribe</button>
+      <button class="suite-ws-tab" data-ws="broll" role="tab" aria-selected="false">B-Roll</button>
+      <button class="suite-ws-tab" data-ws="edit" role="tab" aria-selected="false">Edit</button>
+      <button class="suite-ws-tab" data-ws="harmonize" role="tab" aria-selected="false">Harmonize</button>
+      <button class="suite-ws-tab" data-ws="graphics" role="tab" aria-selected="false">Graphics</button>
+    </nav>
+    <div class="suite-topbar-right">
+      <button class="suite-btn suite-btn--ghost suite-btn--small" id="suitePipelineBtn" title="Run Sync/Transcribe/B-Roll together on a folder" aria-label="Run pipeline">Pipeline</button>
+      <button class="suite-btn suite-btn--ghost suite-btn--small" id="suiteSettingsBtn" title="Suite settings" aria-label="Suite settings">⚙</button>
+      <button id="suiteJobsBtn" title="Background jobs" aria-label="Background jobs">
+        Jobs <span id="suiteJobsBadge" hidden>0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= Card Eater workspace ================= -->
+  <section id="workspace-cardeater" class="suite-ws suite-ws--cardeater" hidden>
+    <aside class="suite-controls">
+      <h2 class="suite-panel-title">Card Eater</h2>
+      <p class="suite-hint">Copy camera-card footage/photos to one or more destinations, renamed per a template, and verified byte-for-byte with BLAKE3.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Card</h3>
+        <div class="suite-ce-card" id="ceCardInfo" hidden>
+          <div class="suite-ce-card__row">
+            <span class="suite-ce-card__label" id="ceCardLabel"></span>
+            <button class="suite-btn suite-btn--small suite-btn--ghost" id="ceOpenSource">Open Source</button>
+          </div>
+          <span class="suite-ce-card__path" id="ceCardPath"></span>
+        </div>
+        <p class="suite-hint suite-hint--tight" id="ceNoCardHint">No card detected — insert a memory card/reader, or open a folder to treat it as one.</p>
+        <button class="suite-btn suite-btn--ghost" id="ceOpenFolderAsCard">Open Folder as Card…</button>
+        <div class="suite-ce-queue__safe" id="ceSafeToRemove" hidden></div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Naming Template</h3>
+
+        <label class="suite-field">
+          <span>Event / shoot name</span>
+          <input type="text" id="ceEventName" placeholder="e.g. Football_vs_Exeter" />
+        </label>
+
+        <div class="suite-block" style="gap:6px">
+          <span class="suite-hint suite-hint--tight">Date source ({YYYYMMDD})</span>
+          <label class="suite-check"><input type="radio" name="ceDateSource" id="ceDateCardInsert" /> <span>Card insert date</span></label>
+          <label class="suite-check"><input type="radio" name="ceDateSource" id="ceDateFileMeta" /> <span>Each file's own metadata</span></label>
+          <label class="suite-check"><input type="radio" name="ceDateSource" id="ceDateManual" /> <span>Manual date</span></label>
+          <input type="date" id="ceManualDate" hidden />
+        </div>
+
+        <label class="suite-field">
+          <span>File name template</span>
+          <input type="text" id="ceFileTemplate" placeholder="{YYYYMMDD}_{Name}_{Seq}.{ext}" />
+        </label>
+
+        <div class="suite-field suite-field--inline">
+          <span>Seq start (blank = auto)</span>
+          <input type="number" id="ceSeqStart" placeholder="auto" />
+        </div>
+        <div class="suite-field suite-field--inline">
+          <span>Zero-padding</span>
+          <input type="number" id="ceSeqPadding" min="1" value="3" />
+        </div>
+
+        <label class="suite-check"><input type="checkbox" id="ceUseSourceFilename" /> <span>Use source filename instead of renaming</span></label>
+
+        <div class="suite-block" style="gap:6px">
+          <span class="suite-hint suite-hint--tight">Folder name template</span>
+          <label class="suite-check"><input type="radio" name="ceFolderMode" id="ceFolderModeNameYear" /> <span>Name + Year <em>({Name} {YYYY})</em></span></label>
+          <label class="suite-check"><input type="radio" name="ceFolderMode" id="ceFolderModeDateName" /> <span>Date + Name <em>({YYYYMMDD}_{Name})</em></span></label>
+          <label class="suite-check"><input type="radio" name="ceFolderMode" id="ceFolderModeCustom" /> <span>Custom</span></label>
+          <input type="text" id="ceFolderTemplate" placeholder="{YYYYMMDD}_{Name}" />
+        </div>
+
+        <label class="suite-check"><input type="checkbox" id="ceNoSubfolder" /> <span>No subfolder — copy directly into destination</span></label>
+
+        <div class="suite-ce-preview" id="cePreview">
+          <p class="suite-hint suite-hint--tight">Select files on a card to see a naming preview.</p>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Destinations</h3>
+        <div class="suite-ce-favs" id="ceFavorites"></div>
+        <div class="suite-folder-row">
+          <input type="text" id="ceNewFavLabel" placeholder="Label" />
+          <input type="text" id="ceNewFavPath" placeholder="/path/to/destination" />
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="ceAddFavorite">+</button>
+        </div>
+        <button class="suite-btn suite-btn--ghost" id="ceAddDestination">Add Destination…</button>
+        <ul class="suite-file-list" id="ceDestList"></ul>
+      </div>
+    </aside>
+
+    <div class="suite-results" id="ceResultsPanel">
+      <div class="suite-results-head">
+        <h3 class="suite-block-title">Files</h3>
+        <div class="suite-ce-head-actions">
+          <span class="suite-hint suite-hint--tight" id="ceSelectionSummary"></span>
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="ceHistoryBtn">Job History</button>
+        </div>
+      </div>
+
+      <div class="suite-ce-toolbar" id="ceToolbar" hidden>
+        <div class="suite-ce-filters" id="ceExtFilters"></div>
+        <label class="suite-hint suite-hint--tight">From <input type="date" id="ceDateFrom" /></label>
+        <label class="suite-hint suite-hint--tight">To <input type="date" id="ceDateTo" /></label>
+        <button class="suite-btn suite-btn--ghost suite-btn--small" id="ceSelectAll">Select All</button>
+        <button class="suite-btn suite-btn--ghost suite-btn--small" id="ceSelectNone">Select None</button>
+      </div>
+
+      <div class="suite-results-scroll" id="ceFileListScroll">
+        <p class="suite-empty">No card detected — insert a memory card, or open a folder to treat it as a card, to get started.</p>
+      </div>
+
+      <div class="suite-ce-launcher">
+        <span class="suite-hint" id="ceLaunchSummary">0 file(s) selected</span>
+        <button class="suite-btn suite-btn--primary" id="ceStartJob" disabled>Start Job</button>
+      </div>
+      <div class="suite-ce-spacewarn suite-ce-error" id="ceSpaceWarnings" hidden></div>
+    </div>
+
+    <div class="suite-ce-viewer-resize" id="ceViewerResize" role="separator" aria-orientation="vertical" aria-label="Resize viewer panel" tabindex="0"></div>
+
+    <aside class="suite-ce-viewer">
+      <h3 class="suite-block-title">Viewer</h3>
+      <div class="suite-ce-viewer__body" id="ceViewerBody">
+        <p class="suite-hint suite-hint--tight">Click "View" on a file to preview it and see its metadata here.</p>
+      </div>
+    </aside>
+
+    <!-- Job summary modal -->
+    <div class="suite-ce-modal-overlay" id="ceSummaryModal" hidden>
+      <div class="suite-ce-modal" role="dialog" aria-modal="true" aria-label="Job summary">
+        <div class="suite-ce-modal__head">
+          <h3 class="suite-block-title" style="border:none;padding:0">Job Summary</h3>
+          <button class="suite-ce-modal__close" id="ceSummaryClose" aria-label="Close summary">✕</button>
+        </div>
+        <div class="suite-ce-modal__body" id="ceSummaryBody"></div>
+      </div>
+    </div>
+
+    <!-- Job history modal -->
+    <div class="suite-ce-modal-overlay" id="ceHistoryModal" hidden>
+      <div class="suite-ce-modal suite-ce-modal--wide" role="dialog" aria-modal="true" aria-label="Job history">
+        <div class="suite-ce-modal__head">
+          <h3 class="suite-block-title" style="border:none;padding:0">Job History</h3>
+          <div class="suite-ce-modal__head-actions">
+            <button class="suite-btn suite-btn--secondary suite-btn--small" id="ceHistoryExport">Export CSV…</button>
+            <button class="suite-ce-modal__close" id="ceHistoryClose" aria-label="Close job history">✕</button>
+          </div>
+        </div>
+        <div class="suite-ce-modal__body" id="ceHistoryBody"></div>
+      </div>
+    </div>
+
+    <!-- Destination preview modal -->
+    <div class="suite-ce-modal-overlay" id="ceDestPreviewModal" hidden>
+      <div class="suite-ce-modal" role="dialog" aria-modal="true" aria-label="Destination preview">
+        <div class="suite-ce-modal__head">
+          <h3 class="suite-block-title" style="border:none;padding:0">What's Already There</h3>
+          <button class="suite-ce-modal__close" id="ceDestPreviewClose" aria-label="Close destination preview">✕</button>
+        </div>
+        <div class="suite-ce-modal__body" id="ceDestPreviewBody"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ================= Sync workspace (addendum v3) ================= -->
+  <section id="workspace-sync" class="suite-ws" hidden>
+    <aside class="suite-controls">
+      <h2 class="suite-panel-title">A-Sync</h2>
+      <p class="suite-hint">Line up external audio recorders with camera video — by waveform analysis or embedded timecode. Detected offsets can be nudged, transcribed straight onto the video timeline (no proxy), or exported as a non-merged Premiere XML.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Video</h3>
+        <button class="suite-btn suite-btn--ghost" id="syPickVideo">Choose Video…</button>
+        <div class="suite-sync-file" id="syVideoRow" hidden>
+          <div class="suite-sync-file__row">
+            <span class="suite-sync-file__name" id="syVideoName"></span>
+            <button id="syVideoRemove" title="Remove video" aria-label="Remove video">✕</button>
+          </div>
+          <span class="suite-sync-file__info" id="syVideoInfo"></span>
+        </div>
+        <div class="suite-sync-saved" id="sySavedStrip" hidden>
+          <span id="sySavedLabel"></span>
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="syLoadSaved">Load saved offsets</button>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">External Audio</h3>
+        <button class="suite-btn suite-btn--ghost" id="syAddAudio">Add Audio Files…</button>
+        <ul class="suite-file-list suite-sync-audiolist" id="syAudioList"></ul>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Method</h3>
+        <label class="suite-field">
+          <span>Sync method</span>
+          <select id="syMethod" aria-label="Sync detection method">
+            <option value="waveform" selected>Waveform analysis</option>
+            <option value="timecode">Embedded timecode</option>
+          </select>
+        </label>
+        <p class="suite-hint suite-hint--tight">Waveform analysis cross-correlates the recordings' audio. Embedded timecode uses BWF / camera TC metadata when both sides carry it.</p>
+      </div>
+
+      <button class="suite-btn suite-btn--primary" id="syDetect" disabled>Detect Sync</button>
+
+      <div class="suite-aside-bottom">
+        <label class="suite-check">
+          <input type="checkbox" id="syIncludeCam" checked />
+          <span>Include camera audio</span>
+        </label>
+        <button class="suite-btn suite-btn--secondary" id="syExportXml" disabled>Export Premiere XML…</button>
+      </div>
+    </aside>
+    <div class="suite-results">
+      <div class="suite-sync-projtabs" id="syProjectTabs" hidden></div>
+      <div class="suite-results-head">
+        <h3 class="suite-block-title" id="syResultsTitle">Offsets</h3>
+        <div class="suite-sync-head-actions">
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="syPreviewToggle" disabled>Preview Sync</button>
+          <div class="suite-undo-pair">
+            <button class="suite-undo-btn" id="syUndoBtn" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo offset change" disabled>↩</button>
+            <button class="suite-undo-btn" id="syRedoBtn" title="Redo (Shift+Cmd/Ctrl+Z)" aria-label="Redo offset change" disabled>↪</button>
+          </div>
+        </div>
+      </div>
+      <div class="suite-sync-waveform" id="syWaveform" hidden>
+        <div class="suite-sync-wave-toolbar" id="syWaveZoomToolbar" hidden>
+          <span class="suite-sync-wave-zoomlabel" id="syWaveZoomLabel">Fit</span>
+          <div class="suite-sync-wave-zoomctl" role="group" aria-label="Zoom timeline">
+            <button id="syWaveZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+            <button id="syWaveZoomReset" title="Reset zoom to fit" aria-label="Reset zoom to fit">Fit</button>
+            <button id="syWaveZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div class="suite-sync-wave-scroll" id="syWaveScroll">
+          <canvas id="syWaveCanvas"></canvas>
+        </div>
+      </div>
+      <div class="suite-sync-player" id="syPlayer" hidden>
+        <div class="suite-sync-player__stage">
+          <video id="syPlayerVideo" playsinline muted></video>
+        </div>
+        <div class="suite-sync-player__transport">
+          <button class="suite-gx-play" id="syPlayerPlay" title="Play / pause" aria-label="Play or pause the synced preview">▶</button>
+          <input type="range" id="syPlayerScrub" min="0" max="1" step="0.001" value="0" aria-label="Preview position" />
+          <span class="suite-sync-player__tc" id="syPlayerTc">0:00 / 0:00</span>
+          <button class="suite-sync-player__close" id="syPlayerClose" title="Close preview" aria-label="Close preview">✕</button>
+        </div>
+        <div class="suite-sync-player__audios" id="syPlayerAudios"></div>
+      </div>
+      <div class="suite-results-scroll" id="syResults">
+        <p class="suite-empty">No sync results yet — choose a video and audio files on the left, then run Detect Sync.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Transcribe workspace ================= -->
+  <section id="workspace-transcribe" class="suite-ws" hidden>
+    <aside class="suite-controls">
+      <h2 class="suite-panel-title">Interview Transcriber</h2>
+      <p class="suite-hint">Transcribe interview footage locally with mlx-whisper. Optional speaker diarization runs via pyannote (needs a Hugging Face token). Results can be sent straight to the Edit workspace as sources.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Videos</h3>
+        <button class="suite-btn suite-btn--ghost" id="tAddVideos">+ Add Videos…</button>
+        <ul class="suite-file-list" id="tQueueList"></ul>
+        <button class="suite-btn suite-btn--ghost" id="tOpenExisting">Open Existing Transcription…</button>
+        <p class="suite-hint suite-hint--tight">Reopens a previously transcribed video's saved transcript (its .ivt-cache.json) for editing — no re-transcription needed.</p>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Settings</h3>
+        <label class="suite-field">
+          <span>Whisper model</span>
+          <select id="tModel"></select>
+        </label>
+        <label class="suite-check">
+          <input type="checkbox" id="tDiarize" />
+          <span>Identify speakers (diarization)</span>
+        </label>
+        <p class="suite-hint suite-hint--tight" id="tTokenHint" hidden>Diarization needs a Hugging Face token — set it in Suite Settings (⚙) → Transcribe.</p>
+        <div class="suite-field suite-field--inline">
+          <span>Simultaneous transcriptions</span>
+          <div class="suite-stepper">
+            <button id="tParDown" aria-label="Fewer simultaneous transcriptions">−</button>
+            <span id="tParValue">1</span>
+            <button id="tParUp" aria-label="More simultaneous transcriptions">+</button>
+          </div>
+        </div>
+        <p class="suite-hint suite-hint--tight">More than 1 competes for the GPU — keep at 1 unless files are short.</p>
+      </div>
+
+      <button class="suite-btn suite-btn--primary" id="tStart">Start Transcription</button>
+    </aside>
+    <div class="suite-results">
+      <div class="suite-results-head" id="tResultsHead">
+        <h3 class="suite-block-title">Transcriptions</h3>
+      </div>
+      <div class="suite-results-scroll" id="tResults">
+        <p class="suite-empty">No transcriptions yet — queue videos on the left and start.</p>
+      </div>
+      <div class="suite-teditor" id="tEditor" hidden></div>
+      <div class="suite-tedplayer" id="tEdPlayer" hidden>
+        <div class="suite-tedplayer__stage"><video id="tEdPlayerVideo" playsinline></video></div>
+        <div class="suite-tedplayer__transport">
+          <button class="suite-gx-play" id="tEdPlayerPlay" title="Play / pause" aria-label="Play or pause the reference video">▶</button>
+          <input type="range" id="tEdPlayerScrub" min="0" max="1" step="0.001" value="0" aria-label="Video position" />
+          <span class="suite-tedplayer__tc" id="tEdPlayerTc">0:00 / 0:00</span>
+          <button class="suite-tedplayer__close" id="tEdPlayerClose" title="Close video" aria-label="Close video">✕</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= B-Roll workspace ================= -->
+  <section id="workspace-broll" class="suite-ws" hidden>
+    <aside class="suite-controls">
+      <h2 class="suite-panel-title">B-Roll Analyzer</h2>
+      <p class="suite-hint">Score a folder of clips for sharpness, exposure, stability and composition, pick the best moments, and send selects to the Edit timeline as B-roll.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Folder</h3>
+        <div class="suite-folder-row">
+          <input type="text" id="bFolder" readonly placeholder="No folder chosen" aria-label="Folder to analyze" />
+          <button class="suite-btn suite-btn--ghost" id="bPickFolder">Browse…</button>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Options</h3>
+        <label class="suite-field suite-field--inline">
+          <span>Segment window (sec)</span>
+          <input type="number" id="bWindowSec" value="4.0" min="1" max="30" step="0.5" />
+        </label>
+        <label class="suite-field suite-field--inline">
+          <span>Segments per clip</span>
+          <input type="number" id="bMaxSegments" value="1" min="1" max="10" step="1" />
+        </label>
+        <label class="suite-field suite-field--inline">
+          <span>Min gap between (sec)</span>
+          <input type="number" id="bMinGap" value="1.0" min="0" max="30" step="0.5" />
+        </label>
+        <label class="suite-check">
+          <input type="checkbox" id="bEnergy" />
+          <span>Score "excitement" with local vision model</span>
+        </label>
+        <label class="suite-field suite-field--inline">
+          <span>Energy weight</span>
+          <input type="number" id="bEnergyWeight" value="0.35" min="0" max="1" step="0.05" disabled />
+        </label>
+        <label class="suite-field suite-field--inline">
+          <span>Parallel workers</span>
+          <input type="number" id="bWorkers" value="3" min="1" max="8" step="1" />
+        </label>
+      </div>
+
+      <button class="suite-btn suite-btn--primary" id="bAnalyze">Analyze Folder</button>
+      <button class="suite-btn suite-btn--ghost" id="bExportXml" disabled>Export Premiere XML…</button>
+    </aside>
+    <div class="suite-results">
+      <div class="suite-results-head">
+        <h3 class="suite-block-title" id="bResultsTitle">Results</h3>
+        <button class="suite-btn suite-btn--secondary" id="bSendSelected" disabled>Send 0 segments to Edit</button>
+      </div>
+      <div class="suite-results-scroll">
+        <div class="suite-broll-grid" id="bGrid">
+          <p class="suite-empty">No analysis yet — choose a folder and click Analyze.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Harmonize workspace ================= -->
+  <section id="workspace-harmonize" class="suite-ws" hidden>
+    <aside class="suite-controls">
+      <h2 class="suite-panel-title">Harmonizer</h2>
+      <p class="suite-hint">Time-align a clean reference recording against multiple performance takes (correcting for tempo drift within each take, not just a single offset) and send the result straight to DaVinci Resolve as stacked, retimed lanes ready to group into a multicam clip.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Reference</h3>
+        <button class="suite-btn suite-btn--ghost" id="hzPickRef">Choose Reference…</button>
+        <div class="suite-sync-file" id="hzRefRow" hidden>
+          <div class="suite-sync-file__row">
+            <span class="suite-sync-file__name" id="hzRefName"></span>
+            <button id="hzRefRemove" title="Remove reference" aria-label="Remove reference">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Takes</h3>
+        <button class="suite-btn suite-btn--ghost" id="hzAddTakes">Add Takes…</button>
+        <ul class="suite-file-list" id="hzTakeList"></ul>
+        <p class="suite-hint suite-hint--tight">Check "same source" for a take fed from the same recorder as the reference — it's placed at the coarse offset only, skipping the (noisy, unnecessary) per-segment retiming.</p>
+      </div>
+
+      <button class="suite-btn suite-btn--primary" id="hzAnalyze" disabled>Analyze</button>
+
+      <div class="suite-aside-bottom">
+        <input type="text" id="hzTimelineName" class="suite-hz-timeline-name"
+               placeholder="Timeline name (optional — defaults to a timestamped name)"
+               aria-label="Timeline name" />
+        <button class="suite-btn suite-btn--primary" id="hzSendResolve" disabled>Send to Resolve</button>
+        <button class="suite-btn suite-btn--secondary" id="hzExportXml" disabled>Export FCPXML…</button>
+      </div>
+    </aside>
+    <div class="suite-results">
+      <div class="suite-results-head">
+        <h3 class="suite-block-title">Alignment</h3>
+      </div>
+      <div class="suite-sync-waveform" id="hzWaveform" hidden>
+        <div class="suite-sync-wave-toolbar" id="hzWaveZoomToolbar" hidden>
+          <span class="suite-sync-wave-zoomlabel" id="hzWaveZoomLabel">Fit</span>
+          <div class="suite-sync-wave-zoomctl" role="group" aria-label="Zoom timeline">
+            <button id="hzWaveZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+            <button id="hzWaveZoomReset" title="Reset zoom to fit" aria-label="Reset zoom to fit">Fit</button>
+            <button id="hzWaveZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div class="suite-sync-wave-scroll" id="hzWaveScroll">
+          <canvas id="hzWaveCanvas"></canvas>
+        </div>
+      </div>
+      <div class="suite-results-scroll" id="hzSummary">
+        <p class="suite-empty">No alignment yet — choose a reference and takes on the left, then click Analyze.</p>
+      </div>
+      <div class="suite-hz-note" id="hzExportNote" hidden></div>
+    </div>
+  </section>
+
+  <!-- ================= Graphics workspace ================= -->
+  <section id="workspace-graphics" class="suite-ws" hidden>
+    <aside class="suite-controls suite-controls--graphics">
+      <div class="suite-gx-header">
+        <h2 class="suite-panel-title">Blair Brander</h2>
+        <div class="suite-undo-pair">
+          <button class="suite-undo-btn" id="gxUndoBtn" title="Undo (Cmd/Ctrl+Z)" aria-label="Undo graphics change" disabled>↩</button>
+          <button class="suite-undo-btn" id="gxRedoBtn" title="Redo (Shift+Cmd/Ctrl+Z)" aria-label="Redo graphics change" disabled>↪</button>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <div class="suite-ai-mode" role="group" aria-label="AI prompt mode">
+          <button class="suite-ai-mode__btn is-active" id="gxAiModeLocal" data-mode="local" aria-pressed="true">Local</button>
+          <button class="suite-ai-mode__btn" id="gxAiModeGemini" data-mode="gemini" aria-pressed="false">Gemini</button>
+        </div>
+        <div class="suite-ai-bar">
+          <textarea id="gxPrompt" rows="4" placeholder='Describe it, e.g. "pop upbeat, square, red gradient"' aria-label="AI style prompt"></textarea>
+          <div class="suite-ai-bar__actions">
+            <button class="suite-btn suite-btn--secondary" id="gxInterpret">Apply</button>
+            <button class="suite-btn suite-btn--secondary" id="gxGenerateGraphic" hidden
+                    title="Generate a completely custom AI background image, on-brand, from your prompt">Generate Graphic</button>
+          </div>
+        </div>
+        <p class="suite-hint suite-hint--tight" id="gxGeminiKeyHint" hidden>Set the Gemini API key in Suite Settings (⚙) → Graphics.</p>
+        <div class="suite-gemini-status" id="gxGeminiCallStatus" hidden></div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Text &amp; Style</h3>
+        <label class="suite-field"><span>Preset</span><select id="gxPreset"></select></label>
+        <label class="suite-field"><span>Title</span><input type="text" id="gxTitle" /></label>
+        <label class="suite-field"><span>Subtitle</span><input type="text" id="gxSubtitle" /></label>
+        <label class="suite-field"><span>Layout</span><select id="gxLayout"></select></label>
+        <label class="suite-field"><span>Canvas</span><select id="gxCanvas"></select></label>
+        <label class="suite-field suite-field--slider">
+          <span>Text position (horizontal) <em id="gxTextOffsetXVal">0px</em></span>
+          <input type="range" id="gxTextOffsetX" min="-400" max="400" step="5" value="0" />
+        </label>
+        <label class="suite-field suite-field--slider">
+          <span>Text position (vertical) <em id="gxTextOffsetYVal">0px</em></span>
+          <input type="range" id="gxTextOffsetY" min="-400" max="400" step="5" value="0" />
+        </label>
+        <div id="gxLowerThirdOpts" hidden>
+          <label class="suite-field"><span>Lower-third position</span><select id="gxLtPosition"></select></label>
+          <label class="suite-field suite-field--slider">
+            <span>Lower-third scale <em id="gxLtScaleVal">100%</em></span>
+            <input type="range" id="gxLtScale" min="50" max="200" step="1" value="100" />
+          </label>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Colors</h3>
+        <div class="suite-swatch-field"><span>Background</span><div class="suite-swatches" id="gxSwBg"></div></div>
+        <div class="suite-swatch-field"><span>Accent / divider</span><div class="suite-swatches" id="gxSwAccent"></div></div>
+        <div class="suite-swatch-field"><span>Text</span><div class="suite-swatches" id="gxSwText"></div></div>
+        <label class="suite-check">
+          <input type="checkbox" id="gxTransparent" />
+          <span>Transparent background (for overlays)</span>
+        </label>
+        <label class="suite-field"><span>Background style (when not transparent)</span><select id="gxBgStyle"></select></label>
+        <div class="suite-swatch-field" id="gxGradientRow" hidden><span>Gradient to</span><div class="suite-swatches" id="gxSwGradient"></div></div>
+        <div class="suite-ai-bg-row" id="gxAiBgRow" hidden>
+          <span>✨ AI-generated graphic active (overrides the style above)</span>
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="gxAiBgClear">Remove</button>
+        </div>
+        <label class="suite-check">
+          <input type="checkbox" id="gxDivider" />
+          <span>Accent divider between title &amp; subtitle</span>
+        </label>
+        <label class="suite-field suite-field--slider">
+          <span>Vignette <em id="gxVignetteVal">0%</em></span>
+          <input type="range" id="gxVignette" min="0" max="100" step="1" value="0" />
+        </label>
+        <label class="suite-field"><span>Vignette shape</span><select id="gxVignetteShape"></select></label>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Type</h3>
+        <label class="suite-field"><span>Title font</span><select id="gxTitleFont"></select></label>
+        <label class="suite-field"><span>Subtitle font</span><select id="gxSubtitleFont"></select></label>
+        <label class="suite-field suite-field--slider">
+          <span>Title size <em id="gxTitleSizeVal">130px</em></span>
+          <input type="range" id="gxTitleSize" min="40" max="300" step="2" value="130" />
+        </label>
+        <label class="suite-field suite-field--slider">
+          <span>Subtitle size <em id="gxSubtitleSizeVal">46px</em></span>
+          <input type="range" id="gxSubtitleSize" min="16" max="140" step="1" value="46" />
+        </label>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Logo</h3>
+        <label class="suite-field"><span>Logo / seal</span>
+          <div class="suite-logo-row">
+            <select id="gxLogo"></select>
+            <button type="button" id="gxRemoveLogo" hidden title="Remove this imported logo" aria-label="Remove this imported logo">✕</button>
+          </div>
+        </label>
+        <label class="suite-field"><span>Logo color</span>
+          <select id="gxLogoColorMode">
+            <option value="original">Original</option>
+            <option value="white">White</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </label>
+        <label class="suite-field" id="gxLogoCustomRow" hidden><span>Custom logo color</span><input type="color" id="gxLogoCustomColor" value="#ffffff" /></label>
+        <label class="suite-field"><span>Logo placement</span><select id="gxLogoPlacement"></select></label>
+        <button class="suite-btn suite-btn--ghost" id="gxImportLogo">Import Logo…</button>
+        <p class="suite-hint suite-hint--tight">PNG or JPEG. Logos on a white background are auto-keyed to transparency.</p>
+        <label class="suite-field suite-field--slider">
+          <span>Logo height <em id="gxLogoHeightVal">160px</em></span>
+          <input type="range" id="gxLogoHeight" min="40" max="900" step="4" value="160" />
+        </label>
+        <label class="suite-field suite-field--slider">
+          <span>Logo opacity <em id="gxLogoOpacityVal">100%</em></span>
+          <input type="range" id="gxLogoOpacity" min="0" max="100" step="1" value="100" />
+        </label>
+        <label class="suite-check">
+          <input type="checkbox" id="gxLogoGrow" />
+          <span>Slow subtle scale-up after intro</span>
+        </label>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Motion</h3>
+        <label class="suite-field"><span>Intro animation</span><select id="gxAnimation"></select></label>
+        <label class="suite-field"><span>Outro animation</span><select id="gxOutro"></select></label>
+        <label class="suite-field suite-field--inline">
+          <span>Duration (sec)</span>
+          <input type="number" id="gxDuration" min="1" max="10" step="0.5" value="4" />
+        </label>
+        <label class="suite-field suite-field--inline">
+          <span>Hold at end (sec)</span>
+          <input type="number" id="gxHold" min="0" max="10" step="0.5" value="1" />
+        </label>
+      </div>
+    </aside>
+    <div class="suite-results suite-results--graphics">
+      <div class="suite-gx-preview-wrap">
+        <div class="suite-gx-canvas" id="gxCanvasWrap">
+          <img id="gxPreviewImg" alt="Title card preview" />
+        </div>
+        <div class="suite-gx-tl" id="gxTimeline">
+          <div class="suite-gx-tl-head">
+            <span class="suite-gx-tl-title">Animation Timing</span>
+            <span class="suite-gx-tl-legend">
+              <i class="suite-gx-tl-swatch suite-gx-tl-swatch--in"></i>In
+              <i class="suite-gx-tl-swatch suite-gx-tl-swatch--out"></i>Out
+            </span>
+          </div>
+          <div class="suite-gx-tl-rows" id="gxTlRows"></div>
+        </div>
+        <div class="suite-gx-scrub-row">
+          <button class="suite-gx-play" id="gxPlay" title="Play the animation" aria-label="Play the animation">▶</button>
+          <span class="suite-gx-scrub-label">Time</span>
+          <input type="range" id="gxScrub" min="0" max="1" step="0.005" value="0" aria-label="Preview time" />
+          <span class="suite-gx-scrub-tc" id="gxScrubTc">plateau</span>
+        </div>
+      </div>
+      <div class="suite-gx-actions">
+        <button class="suite-btn suite-btn--secondary" id="gxExportPng">Export PNG…</button>
+        <div class="suite-gx-video-export">
+          <select id="gxCodec" aria-label="Video codec">
+            <option value="mov">ProRes-style .mov (alpha)</option>
+            <option value="webm">.webm (alpha)</option>
+          </select>
+          <button class="suite-btn suite-btn--secondary" id="gxExportVideo">Export Video…</button>
+        </div>
+        <button class="suite-btn suite-btn--ghost" id="gxSaveProject">Save Project…</button>
+        <button class="suite-btn suite-btn--ghost" id="gxLoadProject">Load Project…</button>
+        <button class="suite-btn suite-btn--primary" id="gxSendToEdit">Send to Edit</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Edit workspace (Rough Cut Studio, untouched) ================= -->
+  <div id="workspace-edit" class="suite-ws" hidden>
+{{RCS_BODY}}
+  </div>
+
+  <!-- ================= Jobs drawer ================= -->
+  <aside id="suiteJobsDrawer" aria-label="Background jobs" aria-hidden="true">
+    <div class="suite-drawer-head">
+      <span class="suite-drawer-title">Background Jobs</span>
+      <div class="suite-drawer-head-actions">
+        <button class="suite-btn suite-btn--ghost suite-btn--small" id="suiteClearFinished">Clear finished</button>
+        <button class="suite-drawer-close" id="suiteJobsClose" title="Close" aria-label="Close jobs drawer">✕</button>
+      </div>
+    </div>
+    <div class="suite-drawer-body" id="suiteJobsList"></div>
+  </aside>
+
+  <!-- ================= Suite settings modal ================= -->
+  <div class="suite-ce-modal-overlay" id="suiteSettingsModal" hidden>
+    <div class="suite-ce-modal suite-ce-modal--wide" role="dialog" aria-modal="true" aria-label="Suite settings">
+      <div class="suite-ce-modal__head">
+        <h3 class="suite-block-title" style="border:none;padding:0">Settings</h3>
+        <button class="suite-ce-modal__close" id="suiteSettingsClose" aria-label="Close settings">✕</button>
+      </div>
+      <nav class="suite-settings-tabs" role="tablist" aria-label="Settings sections">
+        <button class="suite-settings-tab" data-settings-tab="general" role="tab" aria-selected="false">General</button>
+        <button class="suite-settings-tab" data-settings-tab="copy" role="tab" aria-selected="false">Copy</button>
+        <button class="suite-settings-tab" data-settings-tab="transcribe" role="tab" aria-selected="false">Transcribe</button>
+        <button class="suite-settings-tab" data-settings-tab="edit" role="tab" aria-selected="false">Edit</button>
+        <button class="suite-settings-tab" data-settings-tab="graphics" role="tab" aria-selected="false">Graphics</button>
+      </nav>
+      <div class="suite-ce-modal__body" id="suiteSettingsBody">
+
+        <div class="suite-settings-pane" id="settingsPaneGeneral" data-settings-pane="general" hidden>
+          <div class="suite-block">
+            <h3 class="suite-block-title">Notifications</h3>
+            <label class="suite-hint"><input type="checkbox" id="stgNotify" />
+              Notify when a background job finishes and this window isn't focused</label>
+          </div>
+          <div class="suite-block">
+            <h3 class="suite-block-title">BRAW Proxy Cache</h3>
+            <p class="suite-hint" id="stgCacheInfo">Reading cache usage…</p>
+            <button class="suite-btn suite-btn--secondary suite-btn--small" id="stgClearCache">Clear Cache</button>
+          </div>
+        </div>
+
+        <div class="suite-settings-pane" id="settingsPaneCopy" data-settings-pane="copy" hidden>
+          <div class="suite-block">
+            <h3 class="suite-block-title">Naming Templates</h3>
+            <p class="suite-hint suite-hint--tight">Saved templates for the Copy workspace's naming fields. Selecting one loads it into the current draft there.</p>
+            <div class="suite-folder-row">
+              <select id="ceTemplateSelect" aria-label="Saved naming template">
+                <option value="">-- Select saved template --</option>
+              </select>
+              <button class="suite-btn suite-btn--ghost suite-btn--small" id="ceTemplateNew">New</button>
+            </div>
+            <div class="suite-folder-row">
+              <input type="text" id="ceTemplateName" placeholder="Template name" />
+              <button class="suite-btn suite-btn--small suite-btn--primary" id="ceTemplateSave">Save…</button>
+              <button class="suite-btn suite-btn--ghost suite-btn--small" id="ceTemplateDelete" disabled>Delete</button>
+            </div>
+            <p class="suite-hint suite-hint--tight suite-ce-error" id="ceTemplateError" hidden></p>
+
+            <div class="suite-ce-tokens" id="ceTokens">
+              <span title="Date, per the date source below">{YYYYMMDD}</span>
+              <span title="Year only, per the date source below">{YYYY}</span>
+              <span title="Event / shoot name">{Name}</span>
+              <span title="Source filename, no extension">{OriginalName}</span>
+              <span title="Per-job sequence number, zero-padded">{Seq}</span>
+              <span title="File extension">{ext}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="suite-settings-pane" id="settingsPaneTranscribe" data-settings-pane="transcribe" hidden>
+          <div class="suite-block">
+            <h3 class="suite-block-title">Hugging Face Token</h3>
+            <p class="suite-hint suite-hint--tight">Only needed for diarization (pyannote model access) in the Transcribe workspace. Stored in the system keychain.</p>
+            <div class="suite-token-row" id="tTokenRow">
+              <div class="suite-token-status" id="tTokenStatus"></div>
+              <div class="suite-token-edit" id="tTokenEdit" hidden>
+                <input type="password" id="tTokenInput" placeholder="hf_…" autocomplete="off" aria-label="Hugging Face token" />
+                <button class="suite-btn suite-btn--secondary" id="tTokenSave">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="suite-settings-pane" id="settingsPaneEdit" data-settings-pane="edit" hidden>
+          <!-- Rough Cut Studio's own "LLM Provider" block is relocated here at
+               launch (see relocateLlmProviderSettings() in suite.js) -- RCS's
+               own index.html is never modified, only the composed DOM node is
+               moved after the page loads. -->
+        </div>
+
+        <div class="suite-settings-pane" id="settingsPaneGraphics" data-settings-pane="graphics" hidden>
+          <div class="suite-block">
+            <h3 class="suite-block-title">Gemini API Key</h3>
+            <p class="suite-hint suite-hint--tight">Used by Graphics' Gemini AI mode (Apply / Generate Graphic). Stored in the system keychain, separate from Edit's own key.</p>
+            <div class="suite-token-row" id="gxGeminiKeyRow">
+              <div class="suite-token-status" id="gxGeminiKeyStatus"></div>
+              <div class="suite-token-edit" id="gxGeminiKeyEdit" hidden>
+                <input type="password" id="gxGeminiKeyInput" placeholder="Gemini API key" autocomplete="off" aria-label="Gemini API key" />
+                <button class="suite-btn suite-btn--secondary" id="gxGeminiKeySave">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Pipeline modal ================= -->
+  <div class="suite-ce-modal-overlay" id="suitePipelineModal" hidden>
+    <div class="suite-ce-modal suite-ce-modal--wide" role="dialog" aria-modal="true" aria-label="Run pipeline">
+      <div class="suite-ce-modal__head">
+        <h3 class="suite-block-title" style="border:none;padding:0">Run Pipeline</h3>
+        <button class="suite-ce-modal__close" id="suitePipelineClose" aria-label="Close pipeline">✕</button>
+      </div>
+      <div class="suite-ce-modal__body" id="suitePipelineBody"></div>
+    </div>
+  </div>
+
+  <!-- ================= Toasts ================= -->
+  <div id="suiteToasts" aria-live="polite"></div>
+
+  <script src="{{RCS_APPJS_SRC}}"></script>
+  <script src="{{SUITE_JS_SRC}}"></script>
+</body>
+</html>

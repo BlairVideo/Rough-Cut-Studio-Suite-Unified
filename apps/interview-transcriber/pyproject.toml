@@ -1,0 +1,29 @@
+[project]
+name = "interview-transcriber"
+version = "0.1.0"
+description = "Batch interview transcription via mlx-whisper with optional pyannote speaker diarization -- fully local, Apple Silicon only."
+requires-python = ">=3.13"
+dependencies = [
+    # Core GUI
+    "streamlit==1.59.1",
+    # Native desktop window wrapper (so the app opens outside a browser tab)
+    "pywebview==6.2.1",
+    "pyobjc-framework-Cocoa==12.2.1",
+    "pyobjc-framework-WebKit==12.2.1",
+    # Apple Silicon accelerated transcription (Metal backend via MLX)
+    "mlx-whisper==0.4.3",
+    "mlx==0.32.0",
+    # Local speaker diarization (free, requires HF token + accepted license)
+    "pyannote.audio==4.0.7",
+    # pyannote.audio pulls these in transitively; pinned explicitly so a
+    # fresh sync can't silently resolve a different version than the one
+    # this app was verified against.
+    "torch==2.13.0",
+    "torchaudio==2.11.0",
+    # Secure local storage of the Hugging Face token via macOS Keychain
+    "keyring==25.7.0",
+    "rcs-utils",
+]
+
+[tool.uv.sources]
+rcs-utils = { workspace = true }

@@ -1,0 +1,26 @@
+[project]
+name = "broll-analyzer"
+version = "0.1.0"
+description = "Scores a folder of b-roll clips on sharpness/exposure/stability (and optional CLIP-based high-energy detection) and exports a ranked Premiere XML."
+requires-python = ">=3.13"
+dependencies = [
+    # switched from the GUI opencv-python build pre-migration (source has zero
+    # calls to any GUI cv2 function) -- see VENV_CONSOLIDATION_PLAN.md, unifies
+    # with a-sync's variant under the shared workspace venv.
+    "opencv-python-headless==5.0.0.93",
+    "numpy==2.4.6",
+    "Pillow==12.3.0",
+    # optional: powers "Detect high-energy / exciting shots". Fully local,
+    # offline CLIP inference -- weights download once from their normal
+    # open-source host on first use, no cloud API involved.
+    "torch==2.13.0",
+    "torchvision==0.28.0",
+    "open_clip_torch==3.3.0",
+    "rcs-utils",
+]
+
+[tool.uv.sources]
+rcs-utils = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest"]

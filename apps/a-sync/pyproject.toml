@@ -1,0 +1,16 @@
+[project]
+name = "a-sync"
+version = "0.1.0"
+description = "Lines up camera video with separate audio recordings (waveform cross-correlation or embedded BWF/camera timecode) and exports a non-merged, proxy-free Premiere XML."
+requires-python = ">=3.13"
+dependencies = [
+    "numpy==2.4.6",
+    "scipy==1.17.1",
+    "opencv-python-headless==5.0.0.93",
+    "Pillow==12.3.0",
+    "sounddevice==0.5.5",
+    "rcs-utils",
+]
+
+[tool.uv.sources]
+rcs-utils = { workspace = true }

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.13">
+    <resources>
+        <format id="fmt1" name="Harmonizer Test" frameDuration="1/30s" width="4096" height="2304"/>
+        <asset id="asset_take" name="placeholder_C024.mp4" start="0s" duration="3619/30s" hasVideo="1" hasAudio="1" format="fmt1" videoSources="1" audioSources="1" audioChannels="1" audioRate="44100">
+            <media-rep kind="original-media" src="file:///Users/cj/Developer/Personal/Harmonizer/prototype/real_test/placeholder_C024.mp4"/>
+        </asset>
+    </resources>
+    <library>
+        <event name="Harmonizer Simple Test">
+            <project name="Harmonizer Simple Test">
+                <sequence format="fmt1" duration="90s" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <asset-clip ref="asset_take" name="placeholder_C024.mp4" offset="0s" start="0s" duration="90s">
+                            <timeMap>
+                                <timept time="0s" value="0s" interp="linear"/>
+                                <timept time="60s" value="60s" interp="linear"/>
+                                <timept time="90s" value="3619/30s" interp="linear"/>
+                            </timeMap>
+                        </asset-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

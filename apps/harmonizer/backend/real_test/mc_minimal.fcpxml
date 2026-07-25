@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.13">
+    <resources>
+        <format id="fmt1" name="Harmonizer Test" frameDuration="1/30s" width="4096" height="2304"/>
+        <asset id="asset_take" name="Take1" start="0s" duration="3619/30s" hasVideo="1" hasAudio="1" format="fmt1" videoSources="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" src="file:///Users/cj/Desktop/%20Test%20Sample/A001_07191628_C024.mp4"/>
+        </asset>
+        <media id="mc1" name="MC Test">
+            <multicam format="fmt1">
+                <mc-angle name="Angle 1" angleID="a1">
+                    <sync-clip name="Take1" offset="0s" duration="10s">
+                        <asset-clip ref="asset_take" name="Take1" offset="0s" start="0s" duration="10s"/>
+                    </sync-clip>
+                </mc-angle>
+                <mc-angle name="Angle 2" angleID="a2">
+                    <sync-clip name="Take1" offset="0s" duration="10s">
+                        <asset-clip ref="asset_take" name="Take1" offset="0s" start="0s" duration="10s"/>
+                    </sync-clip>
+                </mc-angle>
+            </multicam>
+        </media>
+    </resources>
+    <library>
+        <event name="Harmonizer MC Minimal Test">
+            <project name="Harmonizer MC Minimal Test">
+                <sequence format="fmt1" duration="10s" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <mc-clip ref="mc1" name="MC Test" offset="0s" duration="10s">
+                            <mc-source angleID="a1" srcEnable="all"/>
+                        </mc-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

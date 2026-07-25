@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.13">
+    <resources>
+        <format id="fmt1" name="Harmonizer Test" frameDuration="1/30s" width="4096" height="2304"/>
+        <asset id="asset_take" name="A001_07191628_C024.braw" start="0s" duration="3619/30s" hasVideo="1" hasAudio="1" format="fmt1" videoSources="1" audioSources="1" audioChannels="4" audioRate="48000">
+            <media-rep kind="original-media" src="file:///Volumes/Maelstrom/%20Current/Lindeblad%20Piano%20-%200726/Media/Pyxis%206K/A001_07191628_C024.braw"/>
+        </asset>
+    </resources>
+    <library>
+        <event name="Harmonizer Simple Test">
+            <project name="Harmonizer Simple Test">
+                <sequence format="fmt1" duration="3811/30s" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <gap offset="0s" start="0s" duration="32/5s"/>
+                        <asset-clip ref="asset_take" name="A001_07191628_C024.braw" offset="32/5s" start="0s" duration="3619/30s">
+                            <timeMap>
+                                <timept time="0s" value="0s" interp="linear"/>
+                                <timept time="259/30s" value="272017/30000s" interp="linear"/>
+                                <timept time="331/30s" value="114513/10000s" interp="linear"/>
+                                <timept time="182/15s" value="376891/30000s" interp="linear"/>
+                                <timept time="129/10s" value="8009/600s" interp="linear"/>
+                                <timept time="67/5s" value="415813/30000s" interp="linear"/>
+                                <timept time="217/15s" value="444133/30000s" interp="linear"/>
+                                <timept time="439/30s" value="448781/30000s" interp="linear"/>
+                                <timept time="227/15s" value="28978/1875s" interp="linear"/>
+                                <timept time="278/15s" value="282469/15000s" interp="linear"/>
+                                <timept time="587/30s" value="598999/30000s" interp="linear"/>
+                                <timept time="589/30s" value="100313/5000s" interp="linear"/>
+                                <timept time="593/30s" value="606151/30000s" interp="linear"/>
+                                <timept time="209/10s" value="106807/5000s" interp="linear"/>
+                                <timept time="382/15s" value="259537/10000s" interp="linear"/>
+                                <timept time="142/5s" value="54004/1875s" interp="linear"/>
+                                <timept time="1211/30s" value="611117/15000s" interp="linear"/>
+                                <timept time="81/2s" value="613381/15000s" interp="linear"/>
+                                <timept time="1219/30s" value="1230527/30000s" interp="linear"/>
+                                <timept time="619/15s" value="1250987/30000s" interp="linear"/>
+                                <timept time="1249/30s" value="252263/6000s" interp="linear"/>
+                                <timept time="1277/30s" value="644549/15000s" interp="linear"/>
+                                <timept time="222/5s" value="1341977/30000s" interp="linear"/>
+                                <timept time="226/5s" value="91039/2000s" interp="linear"/>
+                                <timept time="287/6s" value="1443167/30000s" interp="linear"/>
+                                <timept time="1441/30s" value="362249/7500s" interp="linear"/>
+                                <timept time="1483/30s" value="92764/1875s" interp="linear"/>
+                                <timept time="503/10s" value="503327/10000s" interp="linear"/>
+                                <timept time="517/10s" value="1553207/30000s" interp="linear"/>
+                                <timept time="519/10s" value="129893/2500s" interp="linear"/>
+                                <timept time="787/15s" value="32813/625s" interp="linear"/>
+                                <timept time="838/15s" value="1677463/30000s" interp="linear"/>
+                                <timept time="117/2s" value="1760617/30000s" interp="linear"/>
+                                <timept time="179/3s" value="1796071/30000s" interp="linear"/>
+                                <timept time="1817/30s" value="912001/15000s" interp="linear"/>
+                                <timept time="1877/30s" value="1885051/30000s" interp="linear"/>
+                                <timept time="941/15s" value="944929/15000s" interp="linear"/>
+                                <timept time="65s" value="391951/6000s" interp="linear"/>
+                                <timept time="703/10s" value="2118533/30000s" interp="linear"/>
+                                <timept time="1064/15s" value="1069159/15000s" interp="linear"/>
+                                <timept time="72s" value="1085809/15000s" interp="linear"/>
+                                <timept time="2167/30s" value="2178803/30000s" interp="linear"/>
+                                <timept time="362/5s" value="1092017/15000s" interp="linear"/>
+                                <timept time="2207/30s" value="2221519/30000s" interp="linear"/>
+                                <timept time="1106/15s" value="742107/10000s" interp="linear"/>
+                                <timept time="1121/15s" value="1127203/15000s" interp="linear"/>
+                                <timept time="2251/30s" value="754769/10000s" interp="linear"/>
+                                <timept time="2279/30s" value="28631/375s" interp="linear"/>
+                                <timept time="2299/30s" value="1154893/15000s" interp="linear"/>
+                                <timept time="2323/30s" value="777893/10000s" interp="linear"/>
+                                <timept time="389/5s" value="293069/3750s" interp="linear"/>
+                                <timept time="479/6s" value="602321/7500s" interp="linear"/>
+                                <timept time="241/3s" value="605843/7500s" interp="linear"/>
+                                <timept time="1214/15s" value="40703/500s" interp="linear"/>
+                                <timept time="1246/15s" value="25067/300s" interp="linear"/>
+                                <timept time="250/3s" value="502799/6000s" interp="linear"/>
+                                <timept time="2531/30s" value="53016/625s" interp="linear"/>
+                                <timept time="1274/15s" value="854143/10000s" interp="linear"/>
+                                <timept time="1276/15s" value="2566157/30000s" interp="linear"/>
+                                <timept time="1372/15s" value="2757787/30000s" interp="linear"/>
+                                <timept time="2759/30s" value="554731/6000s" interp="linear"/>
+                                <timept time="1384/15s" value="927323/10000s" interp="linear"/>
+                                <timept time="999/10s" value="376379/3750s" interp="linear"/>
+                                <timept time="501/5s" value="1510079/15000s" interp="linear"/>
+                                <timept time="3047/30s" value="1530709/15000s" interp="linear"/>
+                                <timept time="3059/30s" value="1536589/15000s" interp="linear"/>
+                                <timept time="512/5s" value="308627/3000s" interp="linear"/>
+                                <timept time="514/5s" value="258231/2500s" interp="linear"/>
+                                <timept time="103s" value="103493/1000s" interp="linear"/>
+                                <timept time="211/2s" value="1053919/10000s" interp="linear"/>
+                                <timept time="1586/15s" value="1056073/10000s" interp="linear"/>
+                                <timept time="3203/30s" value="1598669/15000s" interp="linear"/>
+                                <timept time="1069/10s" value="1067379/10000s" interp="linear"/>
+                                <timept time="659/6s" value="1649747/15000s" interp="linear"/>
+                                <timept time="3331/30s" value="3337327/30000s" interp="linear"/>
+                                <timept time="557/5s" value="558041/5000s" interp="linear"/>
+                                <timept time="3373/30s" value="1690321/15000s" interp="linear"/>
+                                <timept time="3619/30s" value="3619001/30000s" interp="linear"/>
+                            </timeMap>
+                        </asset-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Blair Academy brand theme (this repo's CLAUDE.md "UI & School Style Guide
+   Standards"). Added during the monorepo migration -- this app didn't define
+   these variables before, unlike card-eater's index.css which already had
+   them (see migration-plan.md §6.6/§7 Phase 2). */
+@theme {
+  --color-athletic-blue: #002244;
+  --color-athletic-blue-light: #0a3968;
+  --color-cool-grey: #72808a;
+  --color-warm-grey: #99928a;
+  --color-surface: #0b1420;
+  --color-surface-raised: #101c2c;
+  --color-surface-inset: #060d16;
+  --color-border-subtle: #1e2c3d;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background-color: #0b0d10;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  color: #e6e8eb;
+}

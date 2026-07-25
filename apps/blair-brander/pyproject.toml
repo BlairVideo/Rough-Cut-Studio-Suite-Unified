@@ -1,0 +1,8 @@
+[project]
+name = "blair-brander"
+version = "0.1.0"
+description = "Brand-compliant animated title cards and lower thirds, live preview, alpha-channel PNG/video export."
+requires-python = ">=3.13"
+dependencies = [
+    "Pillow==12.3.0",
+]

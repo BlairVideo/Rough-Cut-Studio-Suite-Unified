@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.13">
+    <resources>
+        <format id="fmt1" name="Harmonizer Test" frameDuration="1/30s"/>
+        <asset id="asset_ref" name="Reference" start="0s" duration="20s" hasVideo="1" hasAudio="1" format="fmt1" videoSources="1" audioSources="1" audioChannels="2" audioRate="96000">
+            <media-rep kind="original-media" src="file:///Users/cj/Desktop/%20Test%20Sample/STE-006.wav"/>
+        </asset>
+    </resources>
+    <library>
+        <event name="Harmonizer HasVideo1 Test">
+            <project name="Harmonizer HasVideo1 Test">
+                <sequence format="fmt1" duration="20s" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <asset-clip ref="asset_ref" name="Reference" offset="0s" start="0s" duration="20s"/>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

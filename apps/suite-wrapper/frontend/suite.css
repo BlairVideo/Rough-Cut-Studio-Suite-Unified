@@ -1,0 +1,2974 @@
+/* ============================================================
+   STUDIO SUITE — chrome around the four workspaces.
+   Loaded AFTER Rough Cut Studio's style.css and reuses its design
+   tokens (--bg-void, --bg-panel, --amber, --teal, …). Every rule
+   here is scoped to suite-owned ids/classes (#suiteTopbar,
+   #suiteJobsDrawer, #suiteToasts, .suite-*, #workspace-*); the only
+   RCS overrides live inside #workspace-edit, sized so the RCS UI
+   fits below the suite top bar.
+   ============================================================ */
+
+:root {
+  --suite-topbar-h: 48px;
+}
+
+/* ---------------- top bar ---------------- */
+
+#suiteTopbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--suite-topbar-h);
+  z-index: 500;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, #1A1B23 0%, #14151C 100%);
+  border-bottom: 1px solid var(--hairline);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#suiteTopbar .suite-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .08em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+#suiteTopbar .suite-brand__mark {
+  color: var(--amber);
+  font-size: 9px;
+}
+
+#suiteTopbar .suite-brand__suite {
+  color: var(--amber);
+}
+
+#suiteTopbar .suite-ws-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+#suiteTopbar .suite-ws-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent; /* keeps the label vertically centered */
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 0 18px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+
+#suiteTopbar .suite-ws-tab:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.03); }
+#suiteTopbar .suite-ws-tab:focus-visible { outline: 1px solid var(--amber); outline-offset: -3px; }
+#suiteTopbar .suite-ws-tab.is-active {
+  color: var(--amber);
+  border-bottom-color: var(--amber);
+}
+
+#suiteTopbar .suite-topbar-right {
+  display: flex;
+  align-items: center;
+}
+
+#suiteJobsBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+#suiteJobsBtn:hover { border-color: var(--amber); color: var(--amber); }
+#suiteJobsBtn:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+#suiteJobsBadge {
+  background: var(--amber);
+  color: #1B140A;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 9px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ---------------- workspace containers ---------------- */
+
+.suite-ws {
+  position: fixed;
+  top: var(--suite-topbar-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  background: var(--bg-void);
+}
+
+/* Sync / Transcribe / B-Roll / Graphics / Harmonize: two columns — controls rail + results */
+#workspace-sync,
+#workspace-transcribe,
+#workspace-broll,
+#workspace-graphics,
+#workspace-harmonize {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+}
+#workspace-sync[hidden],
+#workspace-transcribe[hidden],
+#workspace-broll[hidden],
+#workspace-graphics[hidden],
+#workspace-harmonize[hidden],
+#workspace-cardeater[hidden] { display: none; }
+
+#workspace-cardeater {
+  display: grid;
+  grid-template-columns: 300px minmax(240px, 1fr) 6px var(--ce-viewer-w, 390px);
+}
+
+.suite-controls {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--hairline);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+}
+
+.suite-panel-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.suite-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* pins its contents to the bottom of a .suite-controls aside */
+.suite-aside-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suite-block-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.suite-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+.suite-hint--tight { font-size: 11px; }
+
+.suite-empty {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ---------------- suite form controls (match RCS look) ---------------- */
+
+.suite-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.suite-field > span { display: flex; justify-content: space-between; align-items: baseline; }
+.suite-field em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.suite-field input[type="text"],
+.suite-field input[type="password"],
+.suite-field input[type="number"],
+.suite-field select,
+.suite-ai-bar textarea,
+.suite-token-edit input,
+.suite-folder-row input {
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s ease;
+  width: 100%;
+}
+.suite-field input:focus,
+.suite-field select:focus,
+.suite-ai-bar textarea:focus,
+.suite-token-edit input:focus { border-color: var(--amber); }
+.suite-field input:disabled { opacity: .45; cursor: not-allowed; }
+
+.suite-field--inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suite-field--inline > span { white-space: nowrap; flex: none; }
+/* Must out-rank `.suite-field input[type="number"]`'s width:100% above,
+   or inline number fields stretch and overflow the control rail. */
+.suite-field.suite-field--inline input { width: 84px; flex: none; text-align: center; font-family: var(--font-mono); }
+
+.suite-field input[type="color"] {
+  padding: 2px;
+  height: 30px;
+  width: 64px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.suite-field--slider input[type="range"] { width: 100%; accent-color: var(--amber); }
+
+/* Logo select + its "Remove custom logo" button, shown only while a
+   custom (imported) logo is selected */
+.suite-logo-row { display: flex; gap: 6px; align-items: center; }
+.suite-logo-row select { flex: 1; min-width: 0; }
+.suite-logo-row button {
+  flex: none;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 7px 9px;
+}
+.suite-logo-row button:hover { color: var(--danger); background: var(--bg-input); }
+
+.suite-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  cursor: pointer;
+}
+.suite-check input { margin-top: 2px; accent-color: var(--amber); }
+
+/* buttons */
+
+.suite-btn {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: .04em;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: transform .05s ease, background .15s ease, border-color .15s ease, color .15s ease;
+}
+.suite-btn:active { transform: translateY(1px); }
+.suite-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.suite-btn:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+.suite-btn--primary { background: var(--amber); color: #1B140A; }
+.suite-btn--primary:hover:not(:disabled) { background: #F2AE49; }
+
+.suite-btn--secondary { background: var(--teal-dim); color: var(--teal); border-color: var(--teal-dim); }
+.suite-btn--secondary:hover:not(:disabled) { background: #2C6260; }
+
+.suite-btn--ghost { background: transparent; border: 1px dashed var(--hairline); color: var(--text-muted); text-align: center; }
+.suite-btn--ghost:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+
+.suite-btn--small { padding: 5px 10px; font-size: 11px; }
+
+/* stepper */
+
+.suite-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex: none;
+}
+.suite-stepper button {
+  background: var(--bg-panel-raised);
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  line-height: 1;
+}
+.suite-stepper button:hover { color: var(--amber); }
+.suite-stepper span {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  width: 32px;
+  text-align: center;
+}
+
+/* file queue (Transcribe) */
+
+.suite-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.suite-file-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+.suite-file-list li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.suite-file-list li button {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.suite-file-list li button:hover { color: var(--danger); background: var(--bg-input); }
+
+/* HF token row */
+
+.suite-token-row { display: flex; flex-direction: column; gap: 7px; }
+.suite-token-status {
+  font-size: 12px;
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suite-token-status.is-missing { color: var(--amber); }
+.suite-token-status button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.suite-token-status button:hover { color: var(--amber); }
+.suite-token-edit { display: flex; gap: 6px; }
+
+/* Gemini call status (addendum v19) — the last-result/in-flight line,
+   distinct from .suite-token-status above (which only ever reflects
+   whether a key is SAVED, never the outcome of a call). */
+.suite-gemini-status {
+  font-size: 12px;
+  padding: 6px 9px;
+  border-radius: 5px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+}
+.suite-gemini-status.is-loading { color: var(--text-muted); }
+.suite-gemini-status.is-ok { color: var(--teal); border-color: var(--teal); }
+.suite-gemini-status.is-error { color: var(--danger); border-color: var(--danger); }
+
+.suite-ai-bg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-radius: 5px;
+  padding: 6px 9px;
+  margin: 4px 0;
+}
+.suite-token-edit input { flex: 1; }
+.suite-token-edit .suite-btn { flex: none; padding: 7px 12px; }
+
+/* folder row (B-Roll) */
+
+.suite-folder-row { display: flex; gap: 6px; }
+.suite-folder-row input { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
+.suite-folder-row .suite-btn { flex: none; padding: 7px 12px; }
+
+/* ---------------- right-hand results columns ---------------- */
+
+.suite-results {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.suite-results-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+.suite-results-head .suite-block-title { border-bottom: none; padding-bottom: 0; }
+
+.suite-results-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-height: 0;
+}
+
+/* ---------------- transcribe results ---------------- */
+
+.suite-tjob {
+  background: var(--bg-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.suite-tjob--loaded { border-left: 3px solid var(--teal-dim); }
+.suite-tjob__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suite-tjob__name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.suite-tjob__meta { font-size: 11px; color: var(--text-faint); }
+.suite-tjob__actions { display: flex; gap: 6px; flex: none; }
+.suite-tjob__segments {
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.suite-tseg { font-size: 12px; line-height: 1.5; color: var(--text-muted); display: flex; gap: 8px; }
+.suite-tseg__tc { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); padding-top: 1px; }
+.suite-tseg__speaker { font-weight: 600; font-size: 11px; }
+.suite-tseg__text { color: var(--text-primary); }
+/* speaker colors, assigned cyclically in suite.js */
+.suite-speaker-0 { color: var(--amber); }
+.suite-speaker-1 { color: var(--teal); }
+.suite-speaker-2 { color: #B48EAD; }
+.suite-speaker-3 { color: #A3BE8C; }
+.suite-speaker-4 { color: #D08770; }
+.suite-speaker-5 { color: #5f8fb4; }
+
+/* ---------------- b-roll results grid ---------------- */
+
+.suite-broll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.suite-broll-grid > .suite-empty { grid-column: 1 / -1; }
+
+.suite-clip {
+  background: var(--bg-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* Thumbnail + segment-preview video share one box, stacked and toggled by
+   visibility so the video plays IN PLACE of the thumbnail rather than
+   appending a second block under it (see suite.js playBrollSegment). */
+.suite-clip__stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-input);
+}
+.suite-clip__thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  margin: 0;
+  background: var(--bg-input);
+}
+.suite-clip__thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-family: var(--font-display);
+}
+.suite-clip__body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.suite-clip__name-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.suite-clip__name {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.suite-clip__duration { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+.suite-clip__scorebar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.suite-clip__scorebar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--amber);
+}
+.suite-clip__scorebar i.is-high { background: var(--teal); }
+.suite-clip__score-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+.suite-clip__error { font-size: 11px; color: var(--danger); line-height: 1.4; }
+.suite-clip__segments { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.suite-seg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 3px 9px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+.suite-seg-chip:hover { border-color: var(--amber); }
+.suite-seg-chip input { accent-color: var(--amber); margin: 0; }
+.suite-seg-chip.is-checked { border-color: var(--amber-dim); color: var(--amber); background: rgba(232, 163, 61, 0.08); }
+.suite-seg-chip .star { color: var(--amber); }
+
+/* ---------------- graphics workspace ---------------- */
+
+.suite-controls--graphics { padding-bottom: 40px; }
+
+.suite-ai-bar { display: flex; flex-direction: column; gap: 6px; }
+.suite-ai-bar textarea {
+  resize: vertical;
+  min-height: 78px;
+  line-height: 1.4;
+  font-family: var(--font-body);
+}
+.suite-ai-bar__actions { display: flex; gap: 6px; }
+.suite-ai-bar__actions .suite-btn { flex: 1; padding: 7px 12px; }
+
+.suite-swatch-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-muted); }
+.suite-swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+.suite-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .08s ease;
+}
+.suite-swatch:hover { transform: scale(1.15); }
+.suite-swatch:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+.suite-swatch.is-selected {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+
+.suite-results--graphics {
+  padding: 20px;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.suite-gx-preview-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* checkerboard backdrop so transparent PNGs read as transparent */
+.suite-gx-canvas {
+  flex: 1;
+  min-height: 240px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background-color: #23242C;
+  background-image:
+    repeating-conic-gradient(#2B2D37 0% 25%, #23242C 0% 50%);
+  background-size: 24px 24px;
+  overflow: hidden;
+}
+#gxPreviewImg {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+#gxPreviewImg:not([src]) { display: none; }
+
+.suite-gx-scrub-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.suite-gx-scrub-label {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex: none;
+}
+.suite-gx-scrub-row input[type="range"] { flex: 1; accent-color: var(--amber); }
+.suite-gx-scrub-tc {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  min-width: 64px;
+  text-align: right;
+}
+
+.suite-gx-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 14px;
+}
+.suite-gx-video-export { display: flex; gap: 6px; align-items: center; }
+.suite-gx-video-export select {
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.suite-gx-actions .suite-btn--primary { margin-left: auto; }
+
+/* ---------------- jobs drawer ---------------- */
+
+#suiteJobsDrawer {
+  position: fixed;
+  top: var(--suite-topbar-h);
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  z-index: 600;
+  background: var(--bg-panel-raised);
+  border-left: 1px solid var(--hairline);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .22s ease;
+  visibility: hidden;
+}
+#suiteJobsDrawer.is-open { transform: translateX(0); visibility: visible; }
+
+#suiteJobsDrawer .suite-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+#suiteJobsDrawer .suite-drawer-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+#suiteJobsDrawer .suite-drawer-head-actions { display: flex; align-items: center; gap: 8px; }
+#suiteJobsDrawer .suite-drawer-close {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 3px;
+}
+#suiteJobsDrawer .suite-drawer-close:hover { color: var(--amber); background: var(--bg-input); }
+
+#suiteJobsDrawer .suite-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suite-job {
+  background: var(--bg-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.suite-job__head { display: flex; align-items: center; gap: 8px; }
+.suite-job__icon { flex: none; font-size: 13px; width: 18px; text-align: center; }
+.suite-job__label {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suite-job__status {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--bg-input);
+  color: var(--text-faint);
+}
+.suite-job__status.is-running { color: var(--amber); background: var(--amber-dim); }
+.suite-job__status.is-done { color: var(--teal); background: var(--teal-dim); }
+.suite-job__status.is-error { color: #fff; background: var(--danger); }
+/* "paused" only occurs for Card Eater copy jobs (kind cardeater_copy) —
+   no other job kind in this drawer supports pausing. */
+.suite-job__status.is-paused { color: var(--text-muted); background: var(--bg-input); }
+/* "queued" (jobs.py's per-kind concurrency throttle — e.g. braw_proxy's
+   limit of 2, transcribe's limit of 1) previously fell through to this
+   pill's unstyled default, visually indistinguishable from a genuinely
+   stuck job. detail already reads "Waiting for an earlier job to
+   finish…" (jobs.py's _start_or_queue) — this just gives the pill its
+   own look instead of the plain default. */
+.suite-job__status.is-queued { color: var(--text-muted); background: var(--bg-panel-raised); }
+.suite-job__cancel {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.suite-job__cancel:hover { color: var(--danger); background: var(--bg-input); }
+
+.suite-job__bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.suite-job__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--amber);
+  transition: width .3s ease;
+}
+.suite-job.is-done .suite-job__bar i { background: var(--teal); }
+.suite-job.is-error .suite-job__bar i,
+.suite-job.is-cancelled .suite-job__bar i { background: var(--danger); }
+
+.suite-job__detail {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suite-job__error { font-size: 11px; color: var(--danger); line-height: 1.4; word-break: break-word; }
+.suite-job__result-path { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); word-break: break-all; }
+.suite-job__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.suite-drawer-empty {
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+  padding: 28px 12px;
+}
+
+/* ---------------- toasts ---------------- */
+
+#suiteToasts {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.suite-toast {
+  pointer-events: auto;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--text-faint);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 10px 14px;
+  animation: suite-toast-in .18s ease;
+  word-break: break-word;
+}
+.suite-toast--ok { border-left-color: var(--teal); }
+.suite-toast--error { border-left-color: var(--danger); }
+.suite-toast--info { border-left-color: var(--amber); }
+.suite-toast.is-leaving { opacity: 0; transition: opacity .3s ease; }
+
+@keyframes suite-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   RCS overrides — ONLY inside #workspace-edit. The RCS stylesheet
+   sizes .app-shell to 100vh; under the suite it must fill the
+   workspace container (viewport minus the 48px suite top bar),
+   which #workspace-edit itself already sizes via fixed inset.
+   The container is a flex column so the suite-owned #suiteTimeline
+   panel docks below the RCS shell instead of overlapping it.
+   ============================================================ */
+
+#workspace-edit {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#workspace-edit[hidden] { display: none; }
+
+#workspace-edit .app-shell {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* the timeline's click-to-reveal flash on a Cuts-table row */
+#workspace-edit tr.suite-row-flash > td {
+  animation: suite-row-flash 1.6s ease;
+}
+@keyframes suite-row-flash {
+  0% { background: rgba(232, 163, 61, 0.32); }
+  60% { background: rgba(232, 163, 61, 0.18); }
+  100% { background: transparent; }
+}
+
+/* ------------------------------------------------------------
+   Creative Brief layout: Generate Script next to the prompt; Runtime
+   (the #durationMeter RCS fills in via renderDurationMeter) directly
+   beside Target Duration, both on the row right under the prompt.
+   RCS itself stacks these five elements in one column
+   (.block--compact { flex-direction: column }); a grid override
+   regroups them without touching any RCS file. Shrinking this block's
+   own footprint (smaller prompt height, tighter gaps) is also what
+   gives .block--output's tabs (Script/Cuts/Export/History) more room
+   below: .block--output already has flex:1 against this block's auto
+   height (RCS's own rule), so the less space this block takes, the
+   more they get — no separate override needed for the tabs themselves.
+
+   #durationMeter is reparented INTO the .field--inline label by
+   suite.js (relocateRuntimeMeter, called once at boot) rather than
+   placed in its own grid cell. An earlier version gave it column 2 of
+   this same grid row — technically "the same row" as Target Duration,
+   but visually on the opposite side of the panel from it (separated by
+   the whole width of the prompt textarea/column 1), which read as
+   unrelated rather than paired. Moving it to be a literal DOM sibling
+   of the Target Duration input, inside the label's own flex row,
+   guarantees it always renders immediately next to that input
+   regardless of column widths.
+   ------------------------------------------------------------ */
+#workspace-edit .panel--main { gap: 12px; }
+
+#workspace-edit .block--compact {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 14px;
+  row-gap: 6px;
+  align-items: start;
+}
+/* Every child needs an EXPLICIT cell — an item left to auto-place (like
+   the "05 — Creative Brief" title) will drift into whatever cell is
+   empty, which changes depending on whether #durationMeter happens to be
+   visible (it's `hidden` until a script has been generated at least
+   once), so it cannot be left implicit. */
+#workspace-edit .block--compact .block__title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+#workspace-edit .block--compact #prompt {
+  grid-column: 1;
+  grid-row: 2;
+  height: 48px; /* ~2 lines instead of RCS's rows="3"; still resize:vertical */
+}
+#workspace-edit .block--compact #btnGenerate {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: center;
+  white-space: nowrap;
+}
+#workspace-edit .block--compact > .field--inline {
+  /* Column 1 ONLY (not 1 / -1) — deliberately the SAME column #prompt
+     occupies, so the reparented #durationMeter is bounded to the
+     textarea's own width and can never extend past its right edge. An
+     earlier version spanned both grid columns so the pill (flex-grow:1)
+     stretched out to fill the ENTIRE row width, well past where the
+     textarea above it ends. */
+  grid-column: 1;
+  grid-row: 3;
+  /* Allow the reparented #durationMeter to drop to its own line — rather
+     than overflow or squeeze the Target Duration input — if the window
+     is narrow enough that label + input + pill don't all fit in one row. */
+  flex-wrap: wrap;
+}
+#workspace-edit .block--compact > .field--inline .duration-meter {
+  /* flex-grow:0 (not 1) — the pill sizes to its own content instead of
+     stretching to fill whatever space is left in the row; min-width:0
+     (not a positive floor) so it can shrink all the way down and wrap
+     onto its own line via the flex-wrap above rather than push past the
+     field row's right edge on a narrow window. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+#workspace-edit .block--compact #status {
+  grid-column: 1 / -1;
+  grid-row: 4;
+}
+
+/* ------------------------------------------------------------
+   Transcript modal search bar (injected by suite.js — RCS's
+   #transcriptModal markup itself is untouched). Sits between
+   .modal__header and .modal__body (NOT inside .modal__body,
+   which scrolls — the search bar must stay pinned above the
+   scrolling table, not scroll away with it).
+   ------------------------------------------------------------ */
+.suite-transcript-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-panel);
+  flex: none;
+}
+.suite-transcript-search input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.suite-transcript-search input:focus { border-color: var(--amber); }
+.suite-transcript-search__count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+#transcriptModalBody tr.suite-row-hidden { display: none; }
+
+/* ============================================================
+   Shared undo/redo button pair (Graphics + transcript editor)
+   ============================================================ */
+
+.suite-gx-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.suite-undo-pair { display: flex; gap: 4px; }
+.suite-undo-btn {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  width: 28px;
+  height: 26px;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.suite-undo-btn:hover:not(:disabled) { color: var(--amber); border-color: var(--amber); }
+.suite-undo-btn:disabled { opacity: .35; cursor: not-allowed; }
+.suite-undo-btn:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+/* ============================================================
+   Transcript editor (Transcribe workspace, addendum A)
+   ============================================================ */
+
+.suite-teditor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.suite-teditor[hidden] { display: none; }
+
+.suite-teditor__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-panel);
+}
+.suite-teditor__name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.suite-teditor__dirty {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-radius: 3px;
+  padding: 2px 7px;
+}
+.suite-teditor__head-actions { margin-left: auto; display: flex; gap: 6px; flex: none; }
+
+.suite-teditor__subtitle {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+}
+
+.suite-teditor__speakers {
+  flex: none;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.suite-tspk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+.suite-tspk.is-excluded { opacity: .5; }
+.suite-tspk__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.suite-tspk__label {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  padding: 5px 8px;
+  outline: none;
+}
+.suite-tspk__label:focus { border-color: var(--amber); }
+.suite-tspk__inc {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.suite-tspk__inc input { accent-color: var(--amber); margin: 0; }
+.suite-tspk__merge {
+  flex: none;
+  width: 130px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  padding: 5px 6px;
+  outline: none;
+}
+.suite-tspk__merge:focus { border-color: var(--amber); }
+
+.suite-teditor__segments {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.suite-tseg-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suite-tseg-edit.is-excluded { opacity: .42; }
+.suite-tseg-edit .suite-tseg__tc { min-width: 88px; }
+.suite-tseg-edit__speaker {
+  flex: none;
+  width: 130px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 6px;
+  outline: none;
+  color: inherit;
+}
+.suite-tseg-edit__speaker:focus { border-color: var(--amber); }
+.suite-tseg-edit__text,
+.suite-tseg-edit__newspeaker {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  padding: 5px 8px;
+  outline: none;
+}
+.suite-tseg-edit__text:focus,
+.suite-tseg-edit__newspeaker:focus { border-color: var(--amber); }
+.suite-tseg-edit__newspeaker { flex: none; width: 130px; border-color: var(--amber); }
+
+/* per-segment "jump to time" control (addendum v5 §C) — small icon-button
+   matching this editor's existing per-row control sizing/spacing. */
+.suite-tseg-jump {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.suite-tseg-jump:hover { color: var(--amber); border-color: var(--amber); }
+.suite-tseg-jump:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+/* ---------------- transcript editor reference video player (addendum v5 §C) ----------------
+   Matches .suite-sync-player exactly (same tokens, same compact transport
+   bar) — new class, .suite-sync-player itself is untouched. */
+.suite-tedplayer {
+  flex: none;
+  margin: 0 20px 12px;
+  background: var(--bg-void, #17181f);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.suite-tedplayer[hidden] { display: none; }
+.suite-tedplayer__stage {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 320px;
+}
+.suite-tedplayer__stage video {
+  width: 100%;
+  max-height: 320px;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+.suite-tedplayer__transport {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--hairline);
+}
+.suite-tedplayer__transport input[type="range"] { flex: 1; accent-color: var(--amber); }
+.suite-tedplayer__tc {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  min-width: 92px;
+  text-align: right;
+}
+.suite-tedplayer__close {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.suite-tedplayer__close:hover { color: var(--danger); background: var(--bg-input); }
+
+/* ============================================================
+   B-roll segment preview (addendum B)
+   ============================================================ */
+
+.suite-clip__preview {
+  position: absolute;
+  inset: 0;
+  display: none; /* only ever off while nothing plays in it — see stage note above */
+  background: #000;
+}
+.suite-clip__stage.is-previewing .suite-clip__thumb { display: none; }
+.suite-clip__stage.is-previewing .suite-clip__preview { display: block; }
+.suite-clip__preview video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.suite-seg-chipwrap { display: inline-flex; align-items: center; gap: 3px; }
+.suite-seg-play {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--bg-panel-raised);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.suite-seg-play:hover { color: var(--teal); border-color: var(--teal); }
+.suite-seg-play.is-active { color: var(--teal); border-color: var(--teal); background: var(--teal-dim); }
+.suite-seg-play:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+/* ============================================================
+   Graphics — AI mode toggle + key row (addendum C4)
+   ============================================================ */
+
+.suite-ai-mode {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  align-self: flex-start;
+}
+.suite-ai-mode__btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.suite-ai-mode__btn + .suite-ai-mode__btn { border-left: 1px solid var(--hairline); }
+.suite-ai-mode__btn.is-active { background: var(--amber-dim); color: var(--amber); }
+.suite-ai-mode__btn:focus-visible { outline: 1px solid var(--amber); outline-offset: -2px; }
+
+.suite-ai-keyrow { display: flex; gap: 6px; align-items: center; }
+.suite-ai-keyrow[hidden] { display: none; }
+.suite-ai-keyrow input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--amber-dim);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 7px 9px;
+  outline: none;
+}
+.suite-ai-keyrow input:focus { border-color: var(--amber); }
+.suite-ai-keyrow .suite-btn { flex: none; }
+
+/* ============================================================
+   Graphics — animation timing timeline (addendum C5)
+   ============================================================ */
+
+.suite-gx-tl {
+  flex: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.suite-gx-tl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.suite-gx-tl-title {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.suite-gx-tl-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.suite-gx-tl-swatch {
+  width: 14px;
+  height: 6px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.suite-gx-tl-swatch--in { background: var(--amber); }
+.suite-gx-tl-swatch--out { background: var(--teal); margin-left: 8px; }
+
+.suite-gx-tl-rows { display: flex; flex-direction: column; gap: 7px; }
+
+.suite-gx-tl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.suite-gx-tl-label {
+  flex: none;
+  width: 52px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: right;
+}
+.suite-gx-tl-track {
+  position: relative;
+  flex: 1;
+  height: 18px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.suite-gx-tl-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  cursor: grab;
+  touch-action: none;
+}
+.suite-gx-tl-bar.is-dragging { cursor: grabbing; filter: brightness(1.2); }
+.suite-gx-tl-bar--in { background: var(--amber); }
+.suite-gx-tl-bar--out { background: var(--teal); }
+.suite-gx-tl-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.suite-gx-tl-handle--l { left: 0; border-radius: 3px 0 0 3px; }
+.suite-gx-tl-handle--r { right: 0; border-radius: 0 3px 3px 0; }
+.suite-gx-tl-bar:hover .suite-gx-tl-handle { background: rgba(0, 0, 0, 0.28); }
+.suite-gx-tl-vals {
+  flex: none;
+  width: 150px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.suite-gx-play {
+  flex: none;
+  width: 30px;
+  height: 26px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--bg-panel-raised);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.suite-gx-play:hover { color: var(--amber); border-color: var(--amber); }
+.suite-gx-play.is-active { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+.suite-gx-play:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+/* ============================================================
+   #suiteTimeline — Edit workspace timeline panel (addendum D)
+   ============================================================ */
+
+#suiteTimeline {
+  flex: none;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#suiteTimeline .suite-tl-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 12px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #1A1B23 0%, #15161D 100%);
+  border-bottom: 1px solid var(--hairline);
+}
+#suiteTimeline .suite-tl-head:focus-visible { outline: 1px solid var(--amber); outline-offset: -2px; }
+#suiteTimeline .suite-tl-chevron { color: var(--text-faint); font-size: 10px; width: 10px; }
+#suiteTimeline .suite-tl-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+#suiteTimeline .suite-tl-meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+#suiteTimeline .suite-tl-body {
+  flex: none;
+  height: 150px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+#suiteTimeline.is-collapsed .suite-tl-body { display: none; }
+
+#suiteTimeline .suite-tl-ruler {
+  flex: none;
+  position: relative;
+  height: 16px;
+  margin-left: 34px;
+  border-bottom: 1px solid var(--hairline);
+}
+#suiteTimeline .suite-tl-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(1px);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--text-faint);
+  border-left: 1px solid var(--hairline);
+  padding-left: 3px;
+  height: 100%;
+  white-space: nowrap;
+}
+
+#suiteTimeline .suite-tl-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#suiteTimeline .suite-tl-lane {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 24px;
+}
+#suiteTimeline .suite-tl-lane__label {
+  flex: none;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+}
+#suiteTimeline .suite-tl-lane__track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#suiteTimeline .suite-tl-block {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  overflow: hidden;
+  cursor: pointer;
+  min-width: 8px;
+}
+#suiteTimeline .suite-tl-block--main {
+  background: rgba(232, 163, 61, 0.22);
+  border: 1px solid var(--amber);
+}
+#suiteTimeline .suite-tl-block--broll {
+  background: rgba(79, 176, 174, 0.22);
+  border: 1px solid var(--teal);
+  cursor: grab;
+  touch-action: none;
+}
+#suiteTimeline .suite-tl-block--broll.is-dragging {
+  cursor: grabbing;
+  filter: brightness(1.3);
+  z-index: 2;
+}
+#suiteTimeline .suite-tl-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 1;
+  cursor: ew-resize;
+  touch-action: none;
+}
+#suiteTimeline .suite-tl-handle--in { left: 0; }
+#suiteTimeline .suite-tl-handle--out { right: 0; }
+#suiteTimeline .suite-tl-handle:hover,
+#suiteTimeline .suite-tl-handle.is-dragging {
+  background: rgba(255, 255, 255, 0.35);
+}
+#suiteTimeline .suite-tl-block__name {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+#suiteTimeline .suite-tl-block__dur {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--text-faint);
+}
+
+#suiteTimeline .suite-tl-empty,
+#suiteTimeline .suite-tl-note {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  padding: 18px 8px;
+  text-align: center;
+}
+
+/* ============================================================
+   Sync workspace (addendum v3) — pickers, offsets, nudges
+   ============================================================ */
+
+/* picked-file cards in the left rail (video row + audio list entries) */
+.suite-sync-file {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.suite-sync-file__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.suite-sync-file__name {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.suite-sync-file__row button {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.suite-sync-file__row button:hover { color: var(--danger); background: var(--bg-input); }
+.suite-sync-file__info {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* audio list entries carry a second info line, so they stack vertically */
+.suite-sync-audiolist li { flex-direction: column; align-items: stretch; gap: 3px; }
+.suite-sync-audio__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* "saved offsets found" strip under the video row */
+.suite-sync-saved {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(232, 163, 61, 0.07);
+  border: 1px solid var(--amber-dim);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 11.5px;
+  color: var(--amber);
+  line-height: 1.4;
+}
+.suite-sync-saved .suite-btn { flex: none; }
+
+/* results panel — per-track rows */
+.suite-sync-lede { padding: 0 0 12px; }
+
+.suite-sync-track {
+  background: var(--bg-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.suite-sync-track.is-error { border-left: 3px solid var(--danger); }
+.suite-sync-track__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suite-sync-track__name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.suite-sync-track__fmt { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+.suite-sync-track__error { font-size: 11.5px; color: var(--danger); line-height: 1.4; }
+
+.suite-sync-offsetrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.suite-sync-offset {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--amber);
+  min-width: 170px;
+  white-space: nowrap;
+}
+
+.suite-sync-nudges {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.suite-sync-nudge {
+  background: var(--bg-panel-raised);
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.suite-sync-nudge + .suite-sync-nudge { border-left: 1px solid var(--hairline); }
+.suite-sync-nudge:hover { color: var(--amber); background: var(--bg-input); }
+.suite-sync-nudge:focus-visible { outline: 1px solid var(--amber); outline-offset: -2px; }
+
+.suite-sync-msfield {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.suite-sync-msinput {
+  width: 92px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 8px;
+  text-align: right;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.suite-sync-msinput:focus { border-color: var(--amber); }
+
+.suite-sync-track__actions { display: flex; gap: 6px; }
+
+/* inline transcribe confirm strip */
+.suite-sync-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--teal-dim);
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.suite-sync-confirm__txt { flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-primary); line-height: 1.45; }
+.suite-sync-confirm__txt strong { color: var(--teal); font-weight: 600; }
+.suite-sync-confirm__actions { flex: none; display: flex; gap: 6px; }
+
+/* ---------------- Harmonize workspace ---------------- */
+.suite-hz-take {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.suite-hz-take input[type="checkbox"] { flex: none; }
+
+.suite-hz-timeline-name {
+  flex: none;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.suite-hz-timeline-name:focus { border-color: var(--amber); }
+
+.suite-hz-note {
+  flex: none;
+  margin: 0 20px 10px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--amber);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+/* results head: "Preview Sync" + undo pair (addendum v4) */
+.suite-sync-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* per-track routing row: enable + channel select + preview mute/solo (§C) */
+.suite-sync-routing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 2px;
+}
+.suite-sync-enable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: none;
+}
+.suite-sync-enable input { accent-color: var(--amber); cursor: pointer; }
+.suite-sync-chanfield {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  min-width: 0;
+}
+.suite-sync-chanselect {
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.suite-sync-chanselect:focus { border-color: var(--amber); }
+.suite-sync-chanselect:disabled { opacity: .55; cursor: not-allowed; }
+
+.suite-sync-previewctl {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex: none;
+}
+.suite-sync-ptoggle {
+  background: var(--bg-panel-raised);
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.suite-sync-ptoggle + .suite-sync-ptoggle { border-left: 1px solid var(--hairline); }
+.suite-sync-ptoggle:hover { color: var(--amber); background: var(--bg-input); }
+.suite-sync-ptoggle.is-active { color: var(--teal); background: var(--teal-dim); }
+.suite-sync-ptoggle:disabled { opacity: .4; cursor: not-allowed; }
+.suite-sync-ptoggle:focus-visible { outline: 1px solid var(--amber); outline-offset: -2px; }
+
+/* a disabled track dims (excluded everywhere) */
+.suite-sync-track.is-disabled { opacity: .5; }
+.suite-sync-track.is-disabled .suite-sync-offset { color: var(--text-faint); }
+
+/* ---------------- waveform visual (addendum v20) ---------------- */
+.suite-sync-waveform {
+  flex: none;
+  margin: 0 20px 10px;
+  background: var(--bg-void, #17181f);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 6px;
+}
+.suite-sync-waveform canvas {
+  display: block;
+}
+
+/* zoom toolbar + horizontal scroll wrapper (addendum v21) */
+.suite-sync-wave-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 2px 6px;
+}
+.suite-sync-wave-zoomlabel {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  min-width: 34px;
+  text-align: right;
+}
+.suite-sync-wave-zoomctl {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.suite-sync-wave-zoomctl button {
+  background: var(--bg-panel-raised);
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.suite-sync-wave-zoomctl button + button { border-left: 1px solid var(--hairline); }
+.suite-sync-wave-zoomctl button:hover { color: var(--amber); background: var(--bg-input); }
+.suite-sync-wave-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* project tabs (addendum v21) — switch between multiple loaded sync sets */
+.suite-sync-projtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 20px 0;
+}
+.suite-sync-projtab {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.suite-sync-projtab span { color: var(--text-faint); font-size: 10px; }
+.suite-sync-projtab:hover { color: var(--text-primary); background: var(--bg-input); }
+.suite-sync-projtab.is-active { color: var(--amber); border-color: var(--amber); background: rgba(232, 163, 61, 0.08); }
+.suite-sync-projtab.is-active span { color: var(--amber); }
+
+/* ---------------- synced preview player (§B) ---------------- */
+.suite-sync-player {
+  flex: none;
+  margin: 0 20px 4px;
+  background: var(--bg-void, #17181f);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.suite-sync-player__stage {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 320px;
+}
+.suite-sync-player__stage video {
+  width: 100%;
+  max-height: 320px;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+.suite-sync-player__transport {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--hairline);
+}
+.suite-sync-player__transport input[type="range"] { flex: 1; accent-color: var(--amber); }
+.suite-sync-player__tc {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  min-width: 92px;
+  text-align: right;
+}
+.suite-sync-player__close {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.suite-sync-player__close:hover { color: var(--danger); background: var(--bg-input); }
+/* Holds the per-track <audio> elements. MUST NOT be display:none (or a
+   [hidden] ancestor) — WebKit (the WKWebView this app actually runs in)
+   suspends media playback for elements inside a display:none subtree, so
+   the audio would silently never play while the visible <video> keeps
+   working fine. Pushed off-screen instead, which keeps it "displayed" as
+   far as the render tree/media pipeline is concerned. */
+.suite-sync-player__audios {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ---------------- Favorites (addendum v6) ---------------- */
+
+/* Star toggle injected into the transcript modal's "+ Add" cell — sized to
+   match RCS's own .row-btn exactly (same class) so it sits flush. */
+.suite-fav-btn {
+  font-size: 13px;
+  margin-right: 2px;
+}
+.suite-fav-btn.is-fav { color: var(--amber); }
+.suite-fav-btn.is-fav:hover { color: var(--amber); }
+
+/* Favorite star button (addendum v7 — a real clickable toggle) overlaid
+   on the row's Preview thumbnail (RCS's own .thumb-cell), the same
+   corner-badge treatment as the preview-window star on #previewVideo.
+   .thumb-cell picks up position:relative here (RCS's own rule doesn't
+   set one) purely to anchor this absolutely-positioned child — that
+   alone has no effect on the table's layout. Sized down from the
+   preview-window star's 26px badge since a Cuts row's thumbnail is only
+   64x36px, far smaller than the preview player's video. */
+.thumb-cell { position: relative; }
+.suite-cut-fav-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: rgba(10, 10, 12, 0.62);
+  color: var(--text-primary);
+  font-size: 9px;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+}
+.suite-cut-fav-btn:hover { border-color: var(--amber); }
+
+/* Preview-player star, overlaid directly on the video thumbnail's corner
+   instead of living in the header row far above it (suite.js's
+   injectPreviewFavoriteStar wraps #previewVideo in this div so the star
+   can be positioned relative to the thumbnail's own box, whatever size it
+   renders at). Same rounded-badge-over-media treatment as
+   .suite-seg-play's play-button overlay on the B-Roll segment cards. */
+.suite-preview-thumb-wrap {
+  position: relative;
+}
+.suite-preview-fav-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: rgba(10, 10, 12, 0.62);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1;
+  margin: 0;
+}
+.suite-preview-fav-btn:hover { border-color: var(--amber); }
+
+/* "B-Roll Audio" and "Editorial note" column widths are fixed in suite.js
+   (fixEditTableColumnWidths) by editing RCS's OWN pre-existing <colgroup>
+   (index.html already ships one with explicit per-column pixel widths) —
+   not CSS. A plain th/td:nth-child width rule was tried first and
+   silently did nothing: a <colgroup> is authoritative over per-cell
+   widths under table-layout:fixed, so RCS's own colgroup was winning
+   every time. */
+
+/* The audio-mode dropdown itself (not just the column) sized to match the
+   "B-Roll Audio" header label's own rendered text width (~77px at the
+   header's font/letter-spacing) rather than stretching to fill the whole
+   (wider) column — overrides RCS's own `.audio-cell select { width:100% }`.
+   The duck-db number input gets the same width so the two stacked controls
+   in this cell line up instead of the input looking wider than the select
+   above it. display:block (not RCS's inline-block default) plus a
+   margin-top on the input is what stacks them now that .audio-cell itself
+   is back to a plain table-cell (see below) instead of a flex column —
+   gap: 3px doesn't apply outside flex/grid layout, so that's its
+   replacement. */
+#workspace-edit .audio-cell select,
+#workspace-edit .audio-cell .duck-db-input {
+  display: block;
+  width: 78px;
+}
+#workspace-edit .audio-cell .duck-db-input {
+  margin-top: 3px;
+}
+
+/* RCS's own `.audio-cell { display:flex; flex-direction:column }` (needed
+   to stack the select above the duck-db input) takes this <td> OUT of
+   normal table-cell layout — and a flex-display box substituting for a
+   table cell does NOT get stretched to the row's full assigned height:
+   it sizes to its own content only. Confirmed empirically: a "Silent"-
+   mode audio cell (one control, no duck-db input) measured 42px tall in
+   a 49px-tall row — a previous fix (`justify-content: center` on the flex
+   column) centered the select within that undersized 42px box, which
+   left it ~3.5px above the row's TRUE center where every sibling cell's
+   own control (Track, Source, …) actually sits, via the ordinary
+   `.edit-table td { vertical-align: middle }` those plain <td>s still
+   get. Overriding `.audio-cell` back to `display: table-cell` restores
+   that same ordinary centering — reliably, since it no longer depends on
+   a flex box happening to stretch to the row's height. The select/input
+   still stack top-to-bottom via plain block flow (see above) without
+   needing flex at all. suite.css loads AFTER RCS's style.css with the
+   exact same selector specificity, so this cleanly wins the cascade. */
+#workspace-edit .audio-cell {
+  display: table-cell;
+  vertical-align: middle;
+}
+
+.suite-fav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.suite-fav-empty {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  padding: 24px 4px;
+  text-align: center;
+}
+
+.suite-fav-card {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; /* lets a grid/flex item's own content (e.g. .suite-fav-card__link) truncate instead of forcing the track wider */
+}
+
+.suite-fav-card__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* v18 fix: in the B-Roll tab's ~240px grid cards, a long filename with no
+   shrink/truncation of its own pushed .suite-fav-card__tc partly or fully
+   out of view — the same "one flexible name + fixed-width trailing
+   fields" split .suite-clip__name-row already uses in the Analyzer grid.
+   The source name now truncates with an ellipsis; the timecode/speaker
+   are flex:none so they always render in full. */
+.suite-fav-card__source {
+  color: var(--text-primary);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suite-fav-card__tc {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  flex: none;
+  white-space: nowrap;
+}
+.suite-fav-card__speaker { color: var(--amber); flex: none; white-space: nowrap; }
+
+.suite-fav-card__text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.suite-fav-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-end;
+}
+.suite-fav-card__actions .row-btn {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+}
+.suite-fav-card__actions .row-btn:hover { border-color: var(--amber); }
+
+/* ---------------- B-Roll tab: grid layout (v17) ---------------- */
+/* Same "auto-fill card grid" idea as the B-Roll Analyzer's own
+   .suite-broll-grid, applied as a modifier on the shared .suite-fav-list
+   base (overflow/scroll rules) so the plain Favorites tab keeps its
+   vertical list untouched. */
+.suite-broll-fav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+.suite-broll-fav-grid > .suite-fav-empty { grid-column: 1 / -1; }
+
+/* ---------------- B-Roll tab cards: thumbnail/preview/notes/media link (v16) ---------------- */
+/* Reuses .suite-clip/.suite-clip__stage/.suite-clip__thumb/.suite-clip__preview
+   verbatim (same "thumbnail + in-place preview" box the B-Roll Analyzer grid
+   uses, via playBrollSegment/stopBrollPreview) as a full-width TOP stage —
+   same vertical card shape as the Analyzer grid's own .suite-clip, since a
+   grid cell (v17) is too narrow for a thumbnail + text side by side. */
+.suite-fav-card__stage {
+  width: 100%;
+}
+.suite-fav-card__stage .suite-clip__stage {
+  border-radius: var(--radius);
+}
+.suite-fav-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Overlay variant of .suite-seg-play (suite.css L1314) for when the play
+   button sits ON TOP of the stage instead of inline next to a chip. */
+.suite-seg-play--overlay {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  z-index: 1;
+  background: rgba(20, 20, 20, .55);
+  border-color: rgba(255, 255, 255, .3);
+  color: #fff;
+}
+.suite-seg-play--overlay:hover { color: var(--teal); border-color: var(--teal); }
+
+.suite-fav-card__notelabel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.suite-fav-card__note {
+  width: 100%;
+  min-height: 40px;
+  resize: vertical;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+.suite-fav-card__note:focus { outline: 1px solid var(--amber); outline-offset: 1px; }
+
+/* Media-link button (v16) is its own full-width row (v17: a grid cell is
+   too narrow to also fit Add-to-Cuts/★ on the same line) — left-aligned,
+   truncating a long filename rather than forcing the card wider. */
+.suite-fav-card__link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------- Edit workspace: Sources panel scrollbar fix ---------------- */
+/*
+   RCS's own `.panel` (style.css) sets only `overflow-y: auto` and never
+   `overflow-x` — but overflow-x/overflow-y are a computed PAIR: leaving
+   one at its default 'visible' while the other is non-visible forces the
+   'visible' one to compute as 'auto' too, per every engine's overflow
+   rules. `.source-item__name` (a source's filename/id, rendered
+   verbatim) is `white-space: nowrap` — needed for its own
+   `text-overflow: ellipsis` to have any effect — but has no
+   `min-width: 0`, so as a flex child of `.source-item__row` it refuses
+   to shrink below its full unwrapped text width. A long filename then
+   overflows the fixed 320px `.panel--side` column, and the forced
+   `overflow-x: auto` above turns that overflow into a horizontal
+   scrollbar on the whole left Sources panel. min-width:0 lets the
+   ellipsis truncation actually engage instead, and the explicit
+   overflow-x:hidden is a defense-in-depth guard matching the pattern
+   `.suite-controls` (the equivalent left rail for every other
+   workspace) already uses. Scoped to `.panel--side` only — `.panel--main`
+   relies on its own `.edit-table-wrap { overflow: auto }` for the Cuts
+   table's legitimate horizontal scroll, which this doesn't touch.
+*/
+#workspace-edit .panel--side .source-item__name {
+  min-width: 0;
+}
+#workspace-edit .panel--side {
+  overflow-x: hidden;
+}
+
+/* ---------------- Cuts table: sticky header stacking fix (v18) -------- */
+/*
+   Reported: column labels get visually overrun by scrolled rows instead
+   of staying in front, and look "translucent" where that happens. RCS's
+   own `.edit-table th` (style.css) is `position: sticky` with no
+   `z-index` (defaults to `auto`) — but scrolled ROWS have their own
+   positioned descendants too (`.thumb-cell`, `position: relative`, for
+   the Favorites-star overlay), which land in that SAME z-index:auto
+   stacking layer. Per normal CSS stacking rules that layer paints in DOM
+   tree order, and <tbody> comes after <thead>, so a scrolled row's
+   positioned cell paints ON TOP of the sticky header as it passes
+   underneath — the header isn't actually translucent (its background is
+   a fully opaque hex color), it just has row content visually bleeding
+   over its edge. Giving the header its own explicit z-index lifts its
+   WHOLE subtree (text + the column-resize handles) above every row
+   regardless of DOM order; reasserting the opaque background here too
+   guarantees nothing shows through at the seam.
+*/
+#workspace-edit .edit-table th {
+  z-index: 5;
+  background: var(--bg-panel-raised);
+}
+
+/* ---------------- Cuts table: resizable column widths ---------------- */
+/*
+   One handle per resizable column boundary, injected by suite.js
+   (injectColumnResizeHandles) as the last child of each header <th>.
+   RCS's own `.edit-table th` is already `position: sticky`, which — like
+   relative/absolute/fixed — establishes a containing block for an
+   absolutely-positioned child, so no extra positioning rule is needed on
+   the <th> itself.
+*/
+.suite-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 1;
+}
+.suite-col-resize-handle:hover,
+.suite-col-resize-handle.is-dragging {
+  background: linear-gradient(to right, transparent 3px, var(--amber) 3px, var(--amber) 5px, transparent 5px);
+}
+/* While actively dragging: kill text-selection/cursor flicker over the
+   rest of the page, same idea as the suite timeline's own drag handling. */
+body.suite-col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* ============================================================
+   Card Eater workspace — card ingest: naming template, file
+   selector, destinations/favorites, copy queue, modals.
+   ============================================================ */
+
+.suite-ce-error { color: var(--danger); }
+
+/* -------- card header -------- */
+
+.suite-ce-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.suite-ce-card__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.suite-ce-card__label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.suite-ce-card__path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+/* -------- naming template tokens -------- */
+
+.suite-ce-tokens { display: flex; flex-wrap: wrap; gap: 5px; }
+.suite-ce-tokens span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.suite-ce-preview {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.suite-ce-preview__folder { font-size: 12px; color: var(--text-primary); word-break: break-all; }
+.suite-ce-preview__folder b { color: var(--amber); font-weight: 600; }
+.suite-ce-preview__file {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+.suite-ce-preview__warning { font-size: 11px; color: var(--amber); line-height: 1.4; }
+
+/* -------- favorites (destination bookmarks) -------- */
+
+.suite-ce-favs { display: flex; flex-wrap: wrap; gap: 6px; }
+.suite-ce-fav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 3px 4px 3px 10px;
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+.suite-ce-fav.is-active { color: var(--amber); border-color: var(--amber); }
+.suite-ce-fav button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 50%;
+}
+.suite-ce-fav button:hover { color: var(--danger); }
+
+/* -------- destination list collision badges -------- */
+
+.suite-ce-collision {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.suite-ce-collision--empty { color: var(--text-faint); background: var(--bg-input); border: 1px solid var(--hairline); }
+.suite-ce-collision--full { color: var(--amber); background: var(--amber-dim); border: 1px solid var(--amber); }
+
+/* -------- file selector toolbar -------- */
+
+.suite-ce-toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+.suite-ce-toolbar label { display: flex; align-items: center; gap: 4px; }
+.suite-ce-toolbar input[type="date"] {
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 4px 6px;
+  font-size: 11px;
+}
+.suite-ce-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.suite-ce-filters button {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.suite-ce-filters button.is-active { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+.suite-ce-head-actions { display: flex; align-items: center; gap: 10px; }
+
+/* -------- file list, grouped by folder -------- */
+
+.suite-ce-group { margin-bottom: 10px; }
+.suite-ce-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--bg-panel-raised);
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.suite-ce-group__head input { accent-color: var(--amber); }
+.suite-ce-group__count { font-weight: 400; text-transform: none; color: var(--text-faint); }
+.suite-ce-group__caret { width: 10px; display: inline-block; }
+
+.suite-ce-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--hairline);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.suite-ce-file:hover { background: var(--bg-panel-raised); }
+.suite-ce-file input { accent-color: var(--amber); flex: none; cursor: pointer; }
+.suite-ce-file__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suite-ce-file.is-unavailable { opacity: .65; }
+.suite-ce-file.is-highlighted { background: var(--teal-dim); border-left-color: var(--teal); }
+.suite-ce-file.is-focused { background: var(--amber-dim); border-left-color: var(--amber); }
+.suite-ce-file__ext {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-input);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.suite-ce-file__size, .suite-ce-file__date {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  width: 64px;
+  text-align: right;
+}
+.suite-ce-file__date { width: 140px; }
+
+/* Files list adapts to available width — narrowed by dragging the viewer
+   panel wider, or by a small window — dropping lower-priority columns
+   before the filename itself gets squeezed. Classes toggled by a
+   ResizeObserver on .suite-results (see ceWireResultsResizeObserver);
+   width is unknown at CSS-authoring time since the middle grid column is
+   `1fr` and the viewer column is user-resizable, so container/media
+   queries on the workspace or viewport can't target it — only measuring
+   the actual element works. */
+.suite-results.is-ce-compact .suite-ce-file__date { display: none; }
+.suite-results.is-ce-mini .suite-ce-file__ext { display: none; }
+.suite-results.is-ce-mini .suite-ce-file__size { width: 52px; }
+
+/* -------- viewer panel resize handle (drag to widen/narrow) -------- */
+
+.suite-ce-viewer-resize {
+  position: relative;
+  cursor: col-resize;
+  background: var(--hairline);
+}
+.suite-ce-viewer-resize::before {
+  /* widen the hit area well past the visible 6px track without widening
+     the grid column itself */
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+.suite-ce-viewer-resize:hover,
+.suite-ce-viewer-resize.is-dragging {
+  background: var(--amber);
+}
+body.suite-ce-viewer-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* -------- viewer panel (preview + metadata for the focused file) -------- */
+
+.suite-ce-viewer {
+  background: var(--bg-panel);
+  border-left: 1px solid var(--hairline);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+.suite-ce-viewer__body { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.suite-ce-viewer__media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  min-height: 140px;
+  padding: 8px;
+}
+.suite-ce-viewer__media img,
+.suite-ce-viewer__media video { max-width: 100%; max-height: 260px; border-radius: var(--radius); }
+.suite-ce-viewer__media audio { width: 100%; }
+.suite-ce-viewer__filename {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+  margin: 0;
+}
+.suite-ce-viewer__path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  word-break: break-all;
+  margin: 0;
+}
+.suite-ce-viewer__meta { display: flex; flex-direction: column; gap: 6px; }
+.suite-ce-viewer__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.suite-ce-viewer__row span:first-child { color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
+.suite-ce-viewer__row span:last-child { color: var(--text-primary); text-align: right; word-break: break-word; }
+
+/* -------- job launcher bar -------- */
+
+.suite-ce-launcher {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--hairline);
+}
+.suite-ce-spacewarn {
+  flex: none;
+  padding: 8px 20px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  border-top: 1px solid var(--hairline);
+}
+
+/* -------- "safe to remove card" indicator (Card block) --------
+   Copy progress itself lives in the suite-wide Jobs drawer (kind
+   "cardeater_copy", see .suite-job styles) — this is the one bit of
+   copy-related status that stays in the Copy workspace, since it's
+   about the physical card, not any one job. */
+
+.suite-ce-queue__safe {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+}
+.suite-ce-queue__safe.is-safe { color: var(--teal); border-color: var(--teal); background: var(--teal-dim); }
+.suite-ce-queue__safe.is-waiting { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+
+/* -------- modals (summary / history / preview) -------- */
+
+.suite-ce-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.suite-ce-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.suite-ce-modal--wide { max-width: 760px; }
+.suite-ce-modal__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.suite-ce-modal__head-actions { display: flex; align-items: center; gap: 8px; }
+.suite-ce-modal__close {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 3px 7px;
+  border-radius: 3px;
+}
+.suite-ce-modal__close:hover { color: var(--amber); background: var(--bg-input); }
+.suite-ce-modal__body { display: flex; flex-direction: column; gap: 10px; }
+
+.suite-settings-tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--hairline);
+  margin: -4px 0 4px;
+}
+.suite-settings-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.suite-settings-tab:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.03); }
+.suite-settings-tab:focus-visible { outline: 1px solid var(--amber); outline-offset: -3px; }
+.suite-settings-tab.is-active { color: var(--amber); border-bottom-color: var(--amber); }
+.suite-settings-pane { display: flex; flex-direction: column; gap: 10px; }
+.suite-ce-modal__body--center { align-items: center; justify-content: center; min-height: 200px; }
+.suite-ce-modal__body--center img,
+.suite-ce-modal__body--center video { max-width: 100%; max-height: 60vh; border-radius: var(--radius); }
+.suite-ce-modal__body--center audio { width: 100%; }
+
+.suite-ce-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+.suite-ce-summary-stat {
+  background: var(--bg-panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.suite-ce-summary-stat b { display: block; font-size: 16px; color: var(--text-primary); }
+.suite-ce-summary-stat span { font-size: 10.5px; text-transform: uppercase; color: var(--text-faint); }
+.suite-ce-summary-ok { color: var(--teal); background: var(--teal-dim); border: 1px solid var(--teal); border-radius: var(--radius); padding: 8px 10px; font-size: 12.5px; }
+.suite-ce-summary-fail { color: var(--danger); border: 1px solid var(--danger); border-radius: var(--radius); padding: 8px 10px; }
+.suite-ce-summary-fail ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+.suite-ce-summary-fail li { font-size: 11px; word-break: break-all; }
+
+.suite-ce-history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.suite-ce-history-table th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 8px 6px 0;
+  font-weight: 600;
+}
+.suite-ce-history-table td { padding: 6px 8px 6px 0; border-top: 1px solid var(--hairline); color: var(--text-muted); }
+.suite-ce-history-table td:first-child { color: var(--text-primary); }
+
+.suite-ce-destpreview__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.suite-ce-destpreview__name { color: var(--text-primary); word-break: break-word; }
+.suite-ce-destpreview__size { color: var(--text-faint); flex: none; }

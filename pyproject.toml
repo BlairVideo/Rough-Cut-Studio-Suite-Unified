@@ -1,0 +1,5 @@
+[tool.uv.workspace]
+members = ["apps/*", "apps/harmonizer/backend", "packages/utils"]
+# apps/harmonizer (the Tauri/React UI shell) has no pyproject.toml -- only
+# its backend/ subdirectory (added explicitly above) is a Python member.
+exclude = ["apps/harmonizer"]

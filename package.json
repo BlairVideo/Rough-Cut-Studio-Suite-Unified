@@ -1,0 +1,12 @@
+{
+  "name": "rough-cut-studio-suite",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Root npm workspace manifest for the suite's one Node/Tauri app (harmonizer). CardEater was dropped from the migration (frozen/archived per its own CLAUDE.md, fully superseded by apps/suite-wrapper's in-process Python port -- see migration-plan.md §7 Phase 2), so there's no longer a second Tauri app to share config with; packages/config was folded back into apps/harmonizer directly rather than kept as an unjustified single-consumer package. The 6 Python apps are managed separately via the root uv workspace (pyproject.toml), not npm.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "npm run check --workspaces --if-present"
+  }
+}

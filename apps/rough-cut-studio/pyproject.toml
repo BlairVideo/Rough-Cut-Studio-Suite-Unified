@@ -1,0 +1,9 @@
+[project]
+name = "rough-cut-studio"
+version = "0.1.0"
+description = "The core editor: turns timecoded transcripts + a plain-language prompt into a script and Premiere/FCPXML/OTIO exports, via Gemini or a fully local Ollama model."
+requires-python = ">=3.13"
+dependencies = [
+    "pywebview==6.2.1",
+    "requests==2.34.2",
+]

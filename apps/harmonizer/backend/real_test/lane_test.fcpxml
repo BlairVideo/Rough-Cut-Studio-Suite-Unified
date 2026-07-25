@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.13">
+    <resources>
+        <format id="fmt1" name="Harmonizer Test" frameDuration="1/30s" width="4096" height="2304"/>
+        <asset id="asset_take" name="Take1" start="0s" duration="3619/30s" hasVideo="1" hasAudio="1" format="fmt1" videoSources="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" src="file:///Users/cj/Desktop/%20Test%20Sample/A001_07191628_C024.mp4"/>
+        </asset>
+    </resources>
+    <library>
+        <event name="Harmonizer Lane Test">
+            <project name="Harmonizer Lane Test">
+                <sequence format="fmt1" duration="20s" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <asset-clip ref="asset_take" name="Primary" offset="0s" start="0s" duration="20s">
+                            <asset-clip ref="asset_take" name="Lane1_offset5s" lane="1" offset="5s" start="0s" duration="3s"/>
+                        </asset-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>
