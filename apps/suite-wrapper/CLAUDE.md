@@ -15,8 +15,8 @@ root causes) — read it before assuming something isn't documented.
 ## Run it
 
 ```bash
-./launch_studio_suite.sh      # first run creates .venv + installs requirements
-.venv/bin/python main.py --selftest   # headless: composes the page + runs the full pytest suite
+./launch_studio_suite.sh              # syncs the shared repo-root venv, then runs
+../../.venv/bin/python main.py --selftest   # headless: composes the page + runs the full pytest suite
 ```
 
 **Gotcha (the single most common cause of "I fixed it but it's still
@@ -34,11 +34,20 @@ after touching anything under `backend/`.
   workspace-specific methods. `backend/api_shared.py` holds constants
   shared across mixins and bootstraps RCS's backend dir onto `sys.path`.
 - **Heavy work runs as background jobs** (`backend/jobs.py`), each a
-  *subprocess* using that sibling app's own venv interpreter —
-  `backend/workers/{sync,transcribe,broll}_worker.py`, JSON-lines over a
-  dup'd stdout fd (protocol shared via `backend/workers/worker_protocol.py`).
-  This is why each sibling app needs its own `.venv`: the worker
-  literally runs inside it, not inside Studio Suite's own venv.
+  *subprocess* — `backend/workers/{sync,transcribe,broll,harmonize}_worker.py`,
+  JSON-lines over a dup'd stdout fd (protocol shared via
+  `backend/workers/worker_protocol.py`). Post-monorepo-migration, every
+  worker runs under the same interpreter as the suite itself
+  (`paths.SHARED_VENV_PYTHON`, the one shared `uv` workspace venv at the
+  repo root — see the root `CLAUDE.md`'s Coding Rules section for why
+  per-app venv isolation was traded away). The subprocess-per-worker split
+  itself is unchanged (crash/memory isolation, same as before) — only
+  which interpreter each one runs under changed. **Always `uv sync` the
+  full workspace, never `uv sync --package suite-wrapper`** —
+  `launch_studio_suite.sh` learned this the hard way: a scoped sync
+  uninstalls every OTHER app's deps (torch, mlx-whisper, streamlit,
+  pyannote, ...) from the one shared venv, since uv treats a package left
+  out of `--package` as no longer wanted.
 - **Blair Brander is the one exception** — no Tkinter, pure Pillow, so
   it's imported **in-process** via `backend/brander_bridge.py` rather
   than run as a subprocess. `brander_bridge.default_scene()` replicates
@@ -53,15 +62,12 @@ after touching anything under `backend/`.
   `frontend/shell.html`'s placeholders alongside `suite.css`/`suite.js`.
   Never hand-edit anything under `frontend/_generated/` — it's
   regenerated from scratch every time and any edit is silently lost.
-- **Shared venv packages**: `Studio Suite/.venv-base` holds heavy ML deps
-  (torch, numpy, scipy, opencv, pillow) that three sibling apps need —
-  A-Sync, B-Roll Analyzer, Local Interview Transcriber. Each of *those*
-  apps' own slim `.venv` (not Studio Suite's own `.venv`, which doesn't
-  use this) gets a `_shared_base_venv.pth` file in its site-packages
-  pointing at `.venv-base`'s site-packages, so `pip install` sees those
-  packages as already satisfied without duplicating multi-GB installs
-  per app. See `VENV_CONSOLIDATION_PLAN.md` for the full history,
-  including the Python 3.11→3.13 migration notes.
+- **Shared venv packages**: superseded by a real `uv` workspace — see the
+  root `CLAUDE.md`. `VENV_CONSOLIDATION_PLAN.md` in this directory is kept
+  as historical record of the `.venv-base` + `.pth`-file mechanism that
+  preceded it (which packages were already confirmed at identical pinned
+  versions, the Python 3.11→3.13 migration) — that mechanism no longer
+  exists on disk, don't follow it as current instructions.
 
 ## Sync workspace specifics
 
