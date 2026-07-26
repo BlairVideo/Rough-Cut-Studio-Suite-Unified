@@ -27,3 +27,6 @@ dependencies = [
 
 [tool.uv.sources]
 rcs-utils = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest"]

@@ -103,13 +103,26 @@ PLACEMENT_KEYWORDS = {
 }
 
 LOGO_KEYWORDS = {
-    "Blair Seal (crest)": ["seal", "crest"],
+    # More specific entries first: "seal"/"crest" alone are generic enough
+    # to appear inside phrasing for the other seal-based logos too (e.g.
+    # "the ribbon seal"), and interpret() takes the first match, so a
+    # specific keyword like "ribbon" must be checked before the plain
+    # crest's generic "seal"/"crest" or it can never win.
     "Blair Seal + Ribbon": ["ribbon"],
+    "Blair Seal (crest)": ["seal", "crest"],
     "Blair \"B\" Monogram": ["monogram", "the b", "\"b\" logo", "b logo"],
     "no logo": ["no logo", "without the logo", "no seal", "without a seal"],
 }
 
-DURATION_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:second|sec|s)\b")
+# "second"/"sec"/"s" alone (no plural) so plural "seconds"/"secs" never
+# matched: \b requires a word boundary immediately after the alternative,
+# but "seconds" continues with another word char ('s') right where
+# "second" ends, so the boundary check failed and the whole alternation
+# silently rejected the plural -- the far more natural phrasing ("make it
+# 7 seconds long"). `seconds?`/`secs?` (each already ordered longest-first
+# within the group) restores the boundary check to the end of the actual
+# matched word in both singular and plural forms.
+DURATION_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b")
 
 
 def _contains_any(text, keywords):

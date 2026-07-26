@@ -118,11 +118,19 @@ All apps must feel like official, native school utilities. Adhere strictly to th
   from the repo root, or `cd apps/harmonizer && npm run tauri dev` standalone.
 - Build (Harmonizer): `npm run build --workspace=apps/harmonizer`
 - Typecheck & Lint (Harmonizer only — the Python apps have no TS to check): `npm run check`
-- Python tests: `uv run pytest` from the repo root runs all workspace members; run from inside
-  a single `apps/<app-name>` to scope to just that app. Note: `apps/suite-wrapper`'s own test
-  suite requires Harmonizer's backend to be present to even collect (`suite_api.py` imports
-  `api_harmonize.py` unconditionally) — this was true before the migration too, not something
-  introduced by it.
+- Python tests: `./tools/run_tests.sh` from the repo root runs every workspace member's suite,
+  each in its own `uv run --package` subprocess — **not** a bare `uv run pytest` from the root,
+  which collects every app into one shared Python process. Three apps (`blair-brander`,
+  `broll-analyzer`, `interview-transcriber`) each name their real entrypoint `app.py`; in one
+  combined pytest session, Python's global `sys.modules` cache means whichever app's `app.py`
+  imports first silently satisfies every other app's `import app` for the rest of that run —
+  confirmed by running `blair-brander`'s and `interview-transcriber`'s suites together, which
+  raised an `ImportError` pointing at the wrong app's `app.py`. `tools/run_tests.sh` sidesteps
+  this by giving each member a fresh interpreter. Run `uv run pytest` from inside a single
+  `apps/<app-name>` to scope to just that app (safe — only one `app.py` in play there). Note:
+  `apps/suite-wrapper`'s own test suite requires Harmonizer's backend to be present to even
+  collect (`suite_api.py` imports `api_harmonize.py` unconditionally) — this was true before the
+  migration too, not something introduced by it.
 
 # Coding & Output Guidelines
 - No Truncation: Provide full, copy-pasteable files. Do not use "// ... rest of code here".

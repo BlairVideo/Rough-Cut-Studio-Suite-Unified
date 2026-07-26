@@ -35,6 +35,11 @@ dependencies = [
     { name = "sounddevice" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = "==2.4.6" },
@@ -44,6 +49,9 @@ requires-dist = [
     { name = "scipy", specifier = "==1.17.1" },
     { name = "sounddevice", specifier = "==0.5.5" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -289,8 +297,16 @@ dependencies = [
     { name = "pillow" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [{ name = "pillow", specifier = "==12.3.0" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
 
 [[package]]
 name = "blake3"
@@ -1193,6 +1209,11 @@ dependencies = [
     { name = "torchaudio" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "keyring", specifier = "==25.7.0" },
@@ -1207,6 +1228,9 @@ requires-dist = [
     { name = "torch", specifier = "==2.13.0" },
     { name = "torchaudio", specifier = "==2.11.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
 
 [[package]]
 name = "itsdangerous"
@@ -3041,11 +3065,19 @@ dependencies = [
     { name = "requests" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "pywebview", specifier = "==6.2.1" },
     { name = "requests", specifier = "==2.34.2" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
 
 [[package]]
 name = "rpds-py"

@@ -280,10 +280,13 @@ def read_bwf_timeref(wav_path: str) -> Optional[Tuple[int, int]]:
 
             if chunk_id == b"fmt " and len(data) >= 16:
                 sample_rate = struct.unpack("<I", data[4:8])[0]
-            elif chunk_id == b"bext" and len(data) >= 342:
-                # TimeReference is an 8-byte (low32, high32) field at offset 250
-                low = struct.unpack("<I", data[250:254])[0]
-                high = struct.unpack("<I", data[254:258])[0]
+            elif chunk_id == b"bext" and len(data) >= 346:
+                # Per EBU Tech 3285, the bext chunk lays out Description[256] +
+                # Originator[32] + OriginatorReference[32] + OriginationDate[10] +
+                # OriginationTime[8] = 338 bytes before the 8-byte (low32, high32)
+                # TimeReference field.
+                low = struct.unpack("<I", data[338:342])[0]
+                high = struct.unpack("<I", data[342:346])[0]
                 time_ref = (high << 32) | low
 
         if time_ref is None or sample_rate is None:

@@ -386,31 +386,28 @@ read it. The handful most likely to generate a support request or a
   an arbitrary local file's contents loaded as a "transcript" and sent to
   an LLM provider on the next Generate.
 
-## 7. Testing approach — read this before assuming there's a test suite
+## 7. Testing approach — read this before assuming there's full coverage
 
-**There is no automated test suite (no `pytest`, no CI) as of this
-handoff.** Every feature in this app was validated during development
-via targeted, throwaway Python scripts run directly against the `Api`
-class and the builder modules — real assertions, real XML/JSON parsing,
-real `ffmpeg` execution against synthetic test video files, and for
-OTIO specifically, validation against the actual `opentimelineio`
-reference library (installed only in the dev sandbox, not shipped). This
-is meaningfully more rigorous than "looks right," but it is not the same
-as a maintained, repeatable test suite living in the repo.
-
-**If you're taking this over long-term, the single highest-leverage next
-step is standing up a real `pytest` suite** covering:
-- `transcript_parser.py`'s format auto-detection and timecode math
-  (including drop-frame round-trips — there's a known-good 1,300+ sample
-  sweep that was run ad hoc during development; that's a natural seed
-  for a real parametrized test).
+**A real `pytest` suite now exists** (`tests/`, run via `uv run pytest`
+from this directory or from the repo root as part of the full workspace
+suite) covering:
+- `transcript_parser.py`'s format auto-detection (SRT/WebVTT/bracket-
+  arrow/single-timecode-per-line), timecode↔seconds conversion including
+  a drop-frame round-trip and the documented 1-hour drop-frame reference
+  point, duration-string parsing, and `detect_linked_media`.
 - `xml_builder.py` / `fcpxml_builder.py` / `otio_builder.py` against
-  representative segment lists, checking clip counts, durations, and
-  (for XMEML) stereo track structure.
+  representative segment lists — clip counts, frame/rational-time math,
+  the mandatory two-mono-clip stereo pattern (XMEML), the host-relative
+  B-roll offset (FCPXML) and Gap-insertion (OTIO), and the shared
+  overlapping-B-roll lane-assignment/warning behavior across all three.
+
+**Not yet covered — still the top remaining gap:**
 - `api.py`'s `rebuild_outputs`, history, sequences, and autosave/restore
-  round-trips — these were tested via realistic multi-step scripts during
-  development (generate → edit → save → reload in a fresh `Api`
-  instance → verify) and translate almost directly into test cases.
+  round-trips. These were validated during original development via
+  targeted, throwaway Python scripts run directly against the `Api`
+  class (generate → edit → save → reload in a fresh `Api` instance →
+  verify) — real but not repeatable. Translating those into `tests/`
+  cases is the natural next step.
 
 There is no frontend test coverage at all (no Jest/Playwright/etc.) —
 `app.js` was validated by syntax-checking (`node --check`) plus manual
@@ -454,9 +451,11 @@ name output, not just checking that an attribute was present.
 
 ## 8. Suggested next steps, roughly in priority order
 
-1. **Stand up the pytest suite described in §7.** Nothing else on this
-   list matters if a future change can silently break stereo audio
-   export or drop-frame timecodes without anyone noticing.
+1. **Extend the `pytest` suite (§7) to `api.py`'s round-trip behavior**
+   (`rebuild_outputs`, history, autosave/restore) — the parsing/timecode/
+   export-builder logic already has coverage; this is what's left before
+   a future change to the pipeline itself could silently regress without
+   anyone noticing.
 2. **Package a real installer** (PyInstaller or py2app for macOS, given
    the Blair branding is macOS/Apple-Silicon-targeted). This is the
    clearest remaining adoption barrier — right now, using the app at all

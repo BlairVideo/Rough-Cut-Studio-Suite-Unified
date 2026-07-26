@@ -21,11 +21,12 @@
   `tcEditSnapshot` corrupting undo ordering), and a further pass that
   extracted `backend/sources.py` from `api.py`, closed a project-file
   path-validation gap, and fixed a set of accessibility findings across
-  the UI — see `HANDOFF.md` §3 for what changed and why. No automated
-  test suite yet — see `HANDOFF.md` §7/§8 for the recommended next steps
-  (a real `pytest` suite is the top priority, so fixes like these get
-  regression coverage instead of ad hoc re-verification; a packaged
-  installer is second).
+  the UI — see `HANDOFF.md` §3 for what changed and why. A `pytest`
+  suite (`tests/`) now covers `transcript_parser.py` and the three
+  export builders (`xml_builder.py`/`fcpxml_builder.py`/
+  `otio_builder.py`) — see `HANDOFF.md` §7/§8 for what's covered and
+  what's still ad hoc (`api.py`'s round-trip behavior is the top
+  remaining gap; a packaged installer is second).
 * **Docs to read first:** `README.md` (user-facing behavior, exhaustive
   limitations list) and `HANDOFF.md` (maintainer-facing design decisions,
   known fragile spots, security posture). Both are accurate and detailed —
@@ -57,9 +58,13 @@
 * **Run:** `python main.py` — opens the app's own window immediately.
 * **ffmpeg** (not a pip dependency) is required on PATH for storyboard
   thumbnails and video preview export; everything else works without it.
-* **Testing:** there is no `pytest`/CI suite yet (see `HANDOFF.md` §7).
-  Validate changes manually against the flows described in `README.md`,
-  and check `node --check frontend/app.js` after JS edits.
+* **Testing:** `uv run pytest apps/rough-cut-studio` (or `uv run pytest`
+  from the repo root for the full workspace suite) covers
+  `transcript_parser.py` and the three export builders — see
+  `HANDOFF.md` §7 for what's in scope and what isn't yet (`api.py`'s
+  round-trip behavior). Also validate changes manually against the flows
+  described in `README.md`, and check `node --check frontend/app.js`
+  after JS edits.
 
 ## 4. Code Style & Architectural Rules
 * **Backend bridge:** `backend/api.py` is the single `Api` class exposed to
@@ -147,8 +152,10 @@
 
 ## 5. Immediate Goals & Next Steps
 See `HANDOFF.md` §8 for the maintained priority list. In short:
-- [ ] Stand up a real `pytest` suite (transcript parsing/timecode math,
-      XML/FCPXML/OTIO builders, `api.py` round-trips).
+- [x] Stand up a real `pytest` suite for transcript parsing/timecode math
+      and the XML/FCPXML/OTIO builders — done, see `tests/`.
+- [ ] Extend that suite to `api.py` round-trips (generate/edit/save/
+      reload) — still ad hoc, see `HANDOFF.md` §7/§8.
 - [ ] Package a real installer (PyInstaller/py2app) — running the app
       currently requires a terminal.
 - [ ] Frame-precise B-roll audio ducking, if it turns out to matter.

@@ -7,3 +7,6 @@ dependencies = [
     "pywebview==6.2.1",
     "requests==2.34.2",
 ]
+
+[dependency-groups]
+dev = ["pytest"]
