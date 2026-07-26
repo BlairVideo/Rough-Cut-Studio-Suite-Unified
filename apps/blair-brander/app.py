@@ -71,6 +71,12 @@ def default_scene():
         "background_style": "Solid",
         "divider": True,
         "bg_gradient_color": None,
+        "shadow_enabled": False,
+        "shadow_color": "#000000",
+        "shadow_opacity": 60,
+        "shadow_blur": 8,
+        "shadow_offset_x": 4,
+        "shadow_offset_y": 4,
         "vignette": 0,
         "vignette_shape": brand.DEFAULT_VIGNETTE_SHAPE,
         "title_in_start": 0.0,
@@ -443,6 +449,62 @@ class BlairTitleApp:
         ttk.OptionMenu(cf, self.vignette_shape_var, brand.DEFAULT_VIGNETTE_SHAPE, *brand.VIGNETTE_SHAPES,
                        command=lambda v: self.on_change()).pack(fill="x", padx=8, pady=(0, 8))
 
+        sf = ttk.LabelFrame(f, text="Drop Shadow (title, subtitle & logo)")
+        sf.pack(fill="x", pady=6, padx=2)
+        self.shadow_enabled_var = tk.BooleanVar()
+        ttk.Checkbutton(sf, text="Enable drop shadow", variable=self.shadow_enabled_var,
+                         command=self.on_shadow_enabled_change).pack(anchor="w", padx=8, pady=(4, 6))
+
+        self.shadow_controls = ttk.Frame(sf, style="Dark.TFrame")
+
+        sdrow = ttk.Frame(self.shadow_controls, style="Dark.TFrame")
+        sdrow.pack(fill="x", padx=8, pady=4)
+        ttk.Label(sdrow, text="Color", width=16).pack(side="left")
+        self.shadow_color_swatch = tk.Canvas(sdrow, width=28, height=20, highlightthickness=1, highlightbackground="#666")
+        self.shadow_color_swatch.pack(side="left", padx=6)
+        ttk.Button(sdrow, text="Brand color\u2026",
+                   command=lambda: self.pick_brand_color("shadow_color", self.shadow_color_swatch)).pack(side="left")
+        self.color_swatches["shadow_color"] = self.shadow_color_swatch
+
+        ttk.Label(self.shadow_controls, text="Opacity").pack(anchor="w", padx=8)
+        self.shadow_opacity_var = tk.IntVar(value=60)
+        sorow = ttk.Frame(self.shadow_controls, style="Dark.TFrame")
+        sorow.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Scale(sorow, from_=0, to=100, variable=self.shadow_opacity_var,
+                  command=lambda v: self.on_change()).pack(side="left", fill="x", expand=True)
+        self.shadow_opacity_label = ttk.Label(sorow, text="60%", width=5)
+        self.shadow_opacity_label.pack(side="left", padx=6)
+
+        ttk.Label(self.shadow_controls, text="Blur / softness").pack(anchor="w", padx=8)
+        self.shadow_blur_var = tk.IntVar(value=8)
+        sbrow = ttk.Frame(self.shadow_controls, style="Dark.TFrame")
+        sbrow.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Scale(sbrow, from_=0, to=40, variable=self.shadow_blur_var,
+                  command=lambda v: self.on_change()).pack(side="left", fill="x", expand=True)
+        self.shadow_blur_label = ttk.Label(sbrow, text="8px", width=5)
+        self.shadow_blur_label.pack(side="left", padx=6)
+
+        ttk.Label(self.shadow_controls, text="Offset X").pack(anchor="w", padx=8)
+        self.shadow_offset_x_var = tk.IntVar(value=4)
+        sxrow = ttk.Frame(self.shadow_controls, style="Dark.TFrame")
+        sxrow.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Scale(sxrow, from_=-40, to=40, variable=self.shadow_offset_x_var,
+                  command=lambda v: self.on_change()).pack(side="left", fill="x", expand=True)
+        self.shadow_offset_x_label = ttk.Label(sxrow, text="4px", width=5)
+        self.shadow_offset_x_label.pack(side="left", padx=6)
+
+        ttk.Label(self.shadow_controls, text="Offset Y").pack(anchor="w", padx=8)
+        self.shadow_offset_y_var = tk.IntVar(value=4)
+        syrow = ttk.Frame(self.shadow_controls, style="Dark.TFrame")
+        syrow.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Scale(syrow, from_=-40, to=40, variable=self.shadow_offset_y_var,
+                  command=lambda v: self.on_change()).pack(side="left", fill="x", expand=True)
+        self.shadow_offset_y_label = ttk.Label(syrow, text="4px", width=5)
+        self.shadow_offset_y_label.pack(side="left", padx=6)
+        # self.shadow_controls itself is packed/unpacked dynamically by
+        # _update_shadow_controls_visibility() depending on shadow_enabled_var,
+        # same show/hide pattern as the logo custom-color row.
+
         lf = ttk.LabelFrame(f, text="Logo / Seal \u2014 Blair-sanctioned, all marks cleared for use")
         lf.pack(fill="x", pady=6, padx=2)
         ttk.Label(lf, text="Mark").pack(anchor="w", padx=8)
@@ -592,6 +654,11 @@ class BlairTitleApp:
             self.divider_var.set(bool(s.get("divider", True)))
             self.vignette_var.set(int(s.get("vignette", 0)))
             self.vignette_shape_var.set(s.get("vignette_shape", brand.DEFAULT_VIGNETTE_SHAPE))
+            self.shadow_enabled_var.set(bool(s.get("shadow_enabled", False)))
+            self.shadow_opacity_var.set(int(s.get("shadow_opacity", 60)))
+            self.shadow_blur_var.set(int(s.get("shadow_blur", 8)))
+            self.shadow_offset_x_var.set(int(s.get("shadow_offset_x", 4)))
+            self.shadow_offset_y_var.set(int(s.get("shadow_offset_y", 4)))
             for key, swatch in self.color_swatches.items():
                 if key == "bg_gradient_color" and not s.get("bg_gradient_color"):
                     val = renderer.darken(s.get("bg_color", "#004b8d"), 0.55)
@@ -606,9 +673,14 @@ class BlairTitleApp:
             self.logo_opacity_label.configure(text=f"{int(s.get('logo_opacity', 100))}%")
             self.lt_bg_opacity_label.configure(text=f"{int(s.get('lower_third_bg_opacity', 75))}%")
             self.lt_scale_label.configure(text=f"{int(round(s.get('lower_third_scale', 1.0) * 100))}%")
+            self.shadow_opacity_label.configure(text=f"{int(s.get('shadow_opacity', 60))}%")
+            self.shadow_blur_label.configure(text=f"{int(s.get('shadow_blur', 8))}px")
+            self.shadow_offset_x_label.configure(text=f"{int(s.get('shadow_offset_x', 4))}px")
+            self.shadow_offset_y_label.configure(text=f"{int(s.get('shadow_offset_y', 4))}px")
             self._update_gradient_row_visibility()
             self._update_lower_third_controls_visibility()
             self._update_logo_custom_color_visibility()
+            self._update_shadow_controls_visibility()
             self._update_contrast_warning()
         finally:
             self._syncing = False
@@ -639,12 +711,21 @@ class BlairTitleApp:
         s["divider"] = self.divider_var.get()
         s["vignette"] = int(self.vignette_var.get())
         s["vignette_shape"] = self.vignette_shape_var.get()
+        s["shadow_enabled"] = self.shadow_enabled_var.get()
+        s["shadow_opacity"] = int(self.shadow_opacity_var.get())
+        s["shadow_blur"] = int(self.shadow_blur_var.get())
+        s["shadow_offset_x"] = int(self.shadow_offset_x_var.get())
+        s["shadow_offset_y"] = int(self.shadow_offset_y_var.get())
         self.duration_label.configure(text=f"{s['duration']:.1f}s")
         self.vignette_label.configure(text=f"{s['vignette']}%")
         self.logo_scale_label.configure(text=f"{s['logo_height']}px")
         self.logo_opacity_label.configure(text=f"{s['logo_opacity']}%")
         self.lt_bg_opacity_label.configure(text=f"{s['lower_third_bg_opacity']}%")
         self.lt_scale_label.configure(text=f"{int(self.lt_scale_var.get())}%")
+        self.shadow_opacity_label.configure(text=f"{s['shadow_opacity']}%")
+        self.shadow_blur_label.configure(text=f"{s['shadow_blur']}px")
+        self.shadow_offset_x_label.configure(text=f"{s['shadow_offset_x']}px")
+        self.shadow_offset_y_label.configure(text=f"{s['shadow_offset_y']}px")
         for key, swatch in self.color_swatches.items():
             if key in self._EXPLICIT_ONLY_COLOR_KEYS:
                 continue
@@ -665,6 +746,16 @@ class BlairTitleApp:
             self.logo_custom_color_row.pack(fill="x", padx=8, pady=(0, 6))
         else:
             self.logo_custom_color_row.pack_forget()
+
+    def _update_shadow_controls_visibility(self):
+        if self.shadow_enabled_var.get():
+            self.shadow_controls.pack(fill="x")
+        else:
+            self.shadow_controls.pack_forget()
+
+    def on_shadow_enabled_change(self):
+        self._update_shadow_controls_visibility()
+        self.on_change()
 
     def _update_contrast_warning(self):
         """Nudge (never block) when text/background contrast is low. Uses

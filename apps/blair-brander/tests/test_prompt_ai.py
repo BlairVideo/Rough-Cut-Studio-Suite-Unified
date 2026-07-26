@@ -205,6 +205,15 @@ def test_interpret_divider_on_off():
     assert on_scene["divider"] is True
 
 
+def test_interpret_shadow_on_off():
+    off_scene, _ = prompt_ai.interpret("no shadow please", _base_scene())
+    assert off_scene["shadow_enabled"] is False
+
+    on_scene, notes = prompt_ai.interpret("with a shadow under the title", _base_scene())
+    assert on_scene["shadow_enabled"] is True
+    assert any("shadow" in n.lower() for n in notes)
+
+
 def test_interpret_vignette_explicit_percentage():
     scene, notes = prompt_ai.interpret("vignette at 40%", _base_scene())
     assert scene["vignette"] == 40

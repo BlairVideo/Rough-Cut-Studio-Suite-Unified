@@ -533,6 +533,33 @@
       </div>
 
       <div class="suite-block">
+        <h3 class="suite-block-title">Drop Shadow</h3>
+        <label class="suite-check">
+          <input type="checkbox" id="gxShadowEnabled" />
+          <span>Enable drop shadow (title, subtitle &amp; logo)</span>
+        </label>
+        <div id="gxShadowControls" hidden>
+          <label class="suite-field"><span>Shadow color</span><input type="color" id="gxShadowColor" value="#000000" /></label>
+          <label class="suite-field suite-field--slider">
+            <span>Opacity <em id="gxShadowOpacityVal">60%</em></span>
+            <input type="range" id="gxShadowOpacity" min="0" max="100" step="1" value="60" />
+          </label>
+          <label class="suite-field suite-field--slider">
+            <span>Blur / softness <em id="gxShadowBlurVal">8px</em></span>
+            <input type="range" id="gxShadowBlur" min="0" max="40" step="1" value="8" />
+          </label>
+          <label class="suite-field suite-field--slider">
+            <span>Offset X <em id="gxShadowOffsetXVal">4px</em></span>
+            <input type="range" id="gxShadowOffsetX" min="-40" max="40" step="1" value="4" />
+          </label>
+          <label class="suite-field suite-field--slider">
+            <span>Offset Y <em id="gxShadowOffsetYVal">4px</em></span>
+            <input type="range" id="gxShadowOffsetY" min="-40" max="40" step="1" value="4" />
+          </label>
+        </div>
+      </div>
+
+      <div class="suite-block">
         <h3 class="suite-block-title">Type</h3>
         <label class="suite-field"><span>Title font</span><select id="gxTitleFont"></select></label>
         <label class="suite-field"><span>Subtitle font</span><select id="gxSubtitleFont"></select></label>

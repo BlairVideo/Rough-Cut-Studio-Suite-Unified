@@ -194,3 +194,58 @@ def test_render_still_every_preset_runs_without_error(preset_name):
     scene.update(brand.PRESETS[preset_name])
     img = renderer.render_still(scene)
     assert img.size == tuple(scene["canvas_size"])
+
+
+# ---------------------------------------------------------------------------
+# Drop shadow
+# ---------------------------------------------------------------------------
+
+def test_drop_shadow_layer_none_when_source_fully_transparent():
+    layer = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    assert renderer.drop_shadow_layer(layer, 100, 100, 4, 4, 8, "#000000", 60) is None
+
+
+def test_drop_shadow_layer_none_when_opacity_zero():
+    layer = Image.new("RGBA", (100, 100), (255, 255, 255, 255))
+    assert renderer.drop_shadow_layer(layer, 100, 100, 4, 4, 8, "#000000", 0) is None
+
+
+def test_drop_shadow_layer_paints_shadow_color_at_offset():
+    layer = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    layer.paste((255, 255, 255, 255), (10, 10, 20, 20))
+    shadow = renderer.drop_shadow_layer(layer, 100, 100, 5, 5, 0, "#ff0000", 100)
+    assert shadow is not None
+    # Unblurred, offset by (5, 5): a source pixel at (15, 15) lands at (20, 20).
+    px = shadow.getpixel((20, 20))
+    assert px[:3] == (255, 0, 0)
+    assert px[3] == 255
+
+
+def test_drop_shadow_layer_opacity_scales_alpha():
+    layer = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    layer.paste((255, 255, 255, 255), (10, 10, 90, 90))
+    shadow = renderer.drop_shadow_layer(layer, 100, 100, 0, 0, 0, "#000000", 50)
+    assert shadow.getpixel((50, 50))[3] == pytest.approx(127, abs=1)
+
+
+def test_render_frame_shadow_enabled_runs_without_error_and_darkens_pixel():
+    scene = default_scene()
+    scene["logo"] = "None"
+    scene["shadow_enabled"] = False
+    plain = renderer.render_still(scene)
+
+    scene["shadow_enabled"] = True
+    scene["shadow_color"] = "#000000"
+    scene["shadow_opacity"] = 100
+    scene["shadow_blur"] = 0
+    scene["shadow_offset_x"] = 6
+    scene["shadow_offset_y"] = 6
+    shadowed = renderer.render_still(scene)
+
+    assert shadowed.size == plain.size
+    assert shadowed.tobytes() != plain.tobytes()
+
+
+def test_render_frame_shadow_disabled_is_default():
+    scene = default_scene()
+    assert scene["shadow_enabled"] is False

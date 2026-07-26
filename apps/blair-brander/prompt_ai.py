@@ -326,6 +326,13 @@ def interpret(prompt_text, base_scene):
     elif "divider" in text or "with a line" in text or "underline" in text:
         scene["divider"] = True
 
+    # ---- Drop shadow on/off -------------------------------------------------
+    if "no shadow" in text or "without a shadow" in text or "no drop shadow" in text:
+        scene["shadow_enabled"] = False
+    elif "drop shadow" in text or "with a shadow" in text or "shadowed" in text:
+        scene["shadow_enabled"] = True
+        notes.append("Drop shadow enabled")
+
     if not notes:
         notes.append("No recognized design keywords found — try mentioning a "
                       "mood (elegant / upbeat / athletic), a color, an animation "

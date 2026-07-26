@@ -3388,6 +3388,7 @@
     $("gxLowerThirdOpts").hidden = scene.layout !== "Lower Third";
     $("gxGradientRow").hidden = !(scene.background_style === "Gradient" && !scene.transparent_bg);
     $("gxLogoCustomRow").hidden = scene.logo_color_mode !== "custom";
+    $("gxShadowControls").hidden = !scene.shadow_enabled;
     // addendum v19: an AI-generated background (scene.ai_background_path)
     // overrides background_style entirely (see renderer.render_background) —
     // surface that plainly rather than leaving the style dropdown silently
@@ -3429,6 +3430,8 @@
     $("gxTransparent").checked = !!scene.transparent_bg;
     $("gxDivider").checked = !!scene.divider;
     $("gxLogoGrow").checked = !!scene.logo_grow;
+    $("gxShadowEnabled").checked = !!scene.shadow_enabled;
+    $("gxShadowColor").value = /^#[0-9a-fA-F]{6}$/.test(scene.shadow_color || "") ? scene.shadow_color : "#000000";
 
     const setSlider = (id, valId, value, suffix) => {
       $(id).value = value;
@@ -3439,6 +3442,10 @@
     setSlider("gxLogoHeight", "gxLogoHeightVal", scene.logo_height || 160, "px");
     setSlider("gxLogoOpacity", "gxLogoOpacityVal", scene.logo_opacity != null ? scene.logo_opacity : 100, "%");
     setSlider("gxVignette", "gxVignetteVal", scene.vignette || 0, "%");
+    setSlider("gxShadowOpacity", "gxShadowOpacityVal", scene.shadow_opacity != null ? scene.shadow_opacity : 60, "%");
+    setSlider("gxShadowBlur", "gxShadowBlurVal", scene.shadow_blur != null ? scene.shadow_blur : 8, "px");
+    setSlider("gxShadowOffsetX", "gxShadowOffsetXVal", scene.shadow_offset_x != null ? scene.shadow_offset_x : 4, "px");
+    setSlider("gxShadowOffsetY", "gxShadowOffsetYVal", scene.shadow_offset_y != null ? scene.shadow_offset_y : 4, "px");
     setSlider("gxLtScale", "gxLtScaleVal", Math.round((scene.lower_third_scale || 1.0) * 100), "%");
     setSlider("gxTextOffsetX", "gxTextOffsetXVal", scene.text_offset_x || 0, "px");
     setSlider("gxTextOffsetY", "gxTextOffsetYVal", scene.text_offset_y || 0, "px");
@@ -3790,6 +3797,8 @@
     bind("gxLogoGrow", (scene, e) => { scene.logo_grow = e.target.checked; });
     bind("gxTransparent", (scene, e) => { scene.transparent_bg = e.target.checked; });
     bind("gxDivider", (scene, e) => { scene.divider = e.target.checked; });
+    bind("gxShadowEnabled", (scene, e) => { scene.shadow_enabled = e.target.checked; });
+    bind("gxShadowColor", (scene, e) => { scene.shadow_color = e.target.value; }, "input");
     bind("gxDuration", (scene, e) => { scene.duration = parseFloat(e.target.value) || 4; });
     bind("gxHold", (scene, e) => { scene.hold_seconds = Math.max(0, parseFloat(e.target.value) || 0); });
 
@@ -3812,6 +3821,10 @@
     bindSlider("gxLogoHeight", "gxLogoHeightVal", "px", (s, v) => { s.logo_height = v; });
     bindSlider("gxLogoOpacity", "gxLogoOpacityVal", "%", (s, v) => { s.logo_opacity = v; });
     bindSlider("gxVignette", "gxVignetteVal", "%", (s, v) => { s.vignette = v; });
+    bindSlider("gxShadowOpacity", "gxShadowOpacityVal", "%", (s, v) => { s.shadow_opacity = v; });
+    bindSlider("gxShadowBlur", "gxShadowBlurVal", "px", (s, v) => { s.shadow_blur = v; });
+    bindSlider("gxShadowOffsetX", "gxShadowOffsetXVal", "px", (s, v) => { s.shadow_offset_x = v; });
+    bindSlider("gxShadowOffsetY", "gxShadowOffsetYVal", "px", (s, v) => { s.shadow_offset_y = v; });
     bindSlider("gxLtScale", "gxLtScaleVal", "%", (s, v) => { s.lower_third_scale = Math.round(v) / 100; });
 
     // color swatches (delegated per row container)

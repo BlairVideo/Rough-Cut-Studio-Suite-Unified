@@ -5120,3 +5120,44 @@ highlight rows (teal) without touching any checkbox, and checking one
 box within a multi-row highlight checks (or unchecks) every highlighted
 file together.
 anywhere in this document as of this addendum.
+
+# Addendum v58 — feature: Blair Brander drop shadow for title/subtitle/logo
+
+New scene fields: `shadow_enabled` (bool, default `False`), `shadow_color`
+(hex, default `#000000`), `shadow_opacity` (0-100, default `60`),
+`shadow_blur` (px, default `8`), `shadow_offset_x`/`shadow_offset_y` (px,
+default `4`/`4`).
+
+**Renderer**: `renderer.drop_shadow_layer(layer, w, h, offset_x,
+offset_y, blur, color_hex, opacity_pct)` takes an already-composited
+element layer (title/subtitle/logo, with that element's own in/out
+alpha, wipe-mask and scale already baked in), rebuilds its silhouette
+flat-filled with the shadow color, offsets and Gaussian-blurs it, and
+returns `None` when the shadow would be a no-op (fully transparent
+source or zero opacity). `render_frame()`'s new `_composite_with_shadow`
+helper composites that shadow layer underneath before compositing the
+element itself — shared by all three element layers so they pick up
+identical shadow geometry and so the shadow inherits each element's own
+animation timing for free (it's derived from the already-animated
+layer, not computed independently). Not `lru_cache`'d like
+`_vignette_mask`/`_gradient_layer` — those are pure functions of a few
+scalar knobs, this depends on the source layer's actual pixels, which
+move every frame during in/out animation.
+
+**Standalone app** (`apps/blair-brander/app.py`): new "Drop Shadow"
+`ttk.LabelFrame` between "Brand Colors & Background" and "Logo / Seal",
+enable checkbox + color/opacity/blur/offset-x/offset-y controls, shown/
+hidden via `_update_shadow_controls_visibility()` (same pattern as the
+logo custom-color row). `prompt_ai.py` gained matching keyword handling
+("drop shadow" / "with a shadow" / "shadowed" → on, "no shadow" /
+"without a shadow" → off).
+
+**Suite Wrapper**: mirrored in `brander_bridge.default_scene()` (kept
+verbatim in sync per this file's own rule, enforced by
+`tests/test_sibling_drift.py`) and in the Graphics workspace UI — a new
+"Drop Shadow" block in `shell.html` (enable checkbox + native `<input
+type=color>` + four sliders, following the `gxLogoCustomRow`/
+`gxLowerThirdOpts` show/hide pattern) wired up in `suite.js`
+(`renderFormFromScene`, `gxToggleConditionalRows`, `bind`/`bindSlider`
+registrations). No backend contract changes — `brander_preview`/
+`brander_render_*` already pass the scene dict through opaquely.

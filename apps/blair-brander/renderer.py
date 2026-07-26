@@ -103,6 +103,40 @@ def compute_outro(style, outro_p):
     return (1 - e), 0.0, 1.0
 
 
+def drop_shadow_layer(layer, w, h, offset_x, offset_y, blur, color_hex, opacity_pct):
+    """Given an already-composited RGBA element layer (title/subtitle/logo,
+    with all of that element's own in/out alpha, wipe-mask and scale
+    already baked in), return a shadow layer suitable for compositing
+    UNDERNEATH it: the same silhouette (alpha channel), flat-filled with
+    `color_hex`, scaled by `opacity_pct`, offset by (offset_x, offset_y),
+    then Gaussian-blurred by `blur` px. Returns None when the shadow would
+    be a no-op (fully transparent source or zero opacity) so callers can
+    skip the composite entirely.
+
+    Deliberately NOT lru_cache'd like _vignette_mask/_gradient_layer above
+    — those are pure functions of a few scalar knobs, but this depends on
+    the source layer's actual pixels, which move every frame during
+    in/out animation."""
+    if opacity_pct <= 0:
+        return None
+    alpha = layer.split()[3]
+    if not alpha.getbbox():
+        return None  # fully transparent element -- nothing to shadow
+    if opacity_pct < 100:
+        factor = clamp01(opacity_pct / 100.0)
+        alpha = alpha.point(lambda v: int(v * factor))
+    r, g, b, _ = hex_to_rgba(color_hex)
+    shadow = Image.new("RGBA", (w, h), (r, g, b, 0))
+    shadow.putalpha(alpha)
+    if offset_x or offset_y:
+        shifted = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        shifted.paste(shadow, (int(offset_x), int(offset_y)), shadow)
+        shadow = shifted
+    if blur > 0:
+        shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
+    return shadow
+
+
 def apply_wipe_mask(layer, frac, w, h):
     """Composite `layer` against transparent using a left-to-right reveal
     mask sized to `frac` of the canvas width (1.0 = fully visible, 0.0 =
@@ -339,6 +373,25 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
 
     text_color = scene["text_color"]
     accent_color = scene["accent_color"]
+
+    shadow_enabled = scene.get("shadow_enabled", False)
+    shadow_color = scene.get("shadow_color", "#000000")
+    shadow_opacity = scene.get("shadow_opacity", 60)
+    shadow_blur = scene.get("shadow_blur", 8)
+    shadow_offset_x = scene.get("shadow_offset_x", 4)
+    shadow_offset_y = scene.get("shadow_offset_y", 4)
+
+    def _composite_with_shadow(base_canvas, layer):
+        """Composite `layer` onto `base_canvas`, dropping a shadow
+        underneath first when the scene has one enabled. Shared by the
+        title/subtitle/logo layers below so all three pick up identical
+        shadow geometry."""
+        if shadow_enabled:
+            shadow = drop_shadow_layer(layer, W, H, shadow_offset_x, shadow_offset_y,
+                                        shadow_blur, shadow_color, shadow_opacity)
+            if shadow is not None:
+                base_canvas = Image.alpha_composite(base_canvas, shadow)
+        return Image.alpha_composite(base_canvas, layer)
 
     layout = scene.get("layout", "Full Title Card")
     is_lower_third = layout == "Lower Third"
@@ -587,7 +640,7 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
         a = a.point(lambda v: int(v * title_alpha))
         title_layer.putalpha(a)
 
-    canvas = Image.alpha_composite(canvas, title_layer)
+    canvas = _composite_with_shadow(canvas, title_layer)
     draw = ImageDraw.Draw(canvas)
 
     # ---- Divider ------------------------------------------------------
@@ -622,7 +675,7 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
             sub_layer.putalpha(a)
         if subtitle_wipe_out_frac < 1.0:
             sub_layer = apply_wipe_mask(sub_layer, subtitle_wipe_out_frac, W, H)
-        canvas = Image.alpha_composite(canvas, sub_layer)
+        canvas = _composite_with_shadow(canvas, sub_layer)
 
     # ---- Logo -----------------------------------------------------------
     logo_name = scene.get("logo")
@@ -697,7 +750,7 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
         logo_layer.paste(logo_img, (int(lx), int(ly)), logo_img)
         if logo_wipe_out_frac < 1.0:
             logo_layer = apply_wipe_mask(logo_layer, logo_wipe_out_frac, W, H)
-        canvas = Image.alpha_composite(canvas, logo_layer)
+        canvas = _composite_with_shadow(canvas, logo_layer)
 
     # ---- Vignette (applied last so it darkens the whole composite) -------
     vignette_strength = scene.get("vignette", 0)
