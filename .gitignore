@@ -49,6 +49,22 @@ apps/suite-wrapper/tools/braw/test_av_settings
 apps/harmonizer/backend/braw_sdk/
 
 # ---------------------------------------------------------------------------
+# Harmonizer manual-QA scratch output — regenerated on demand
+# (make_test_audio.py writes ref.wav/take1-3.wav; align.py/make_fcpxml.py
+# write real_test/report*.json + real_test/*.fcpxml), never hand-authored.
+# real_test/placeholder_C024.mp4 is a real test fixture (used by
+# suite-wrapper's test_harmonize_api.py) and stays tracked.
+# ---------------------------------------------------------------------------
+apps/harmonizer/backend/ref.wav
+apps/harmonizer/backend/take1.wav
+apps/harmonizer/backend/take2.wav
+apps/harmonizer/backend/take3.wav
+apps/harmonizer/backend/real_test/*.json
+apps/harmonizer/backend/real_test/*.fcpxml
+apps/harmonizer/backend/real_test/ref.wav
+apps/harmonizer/backend/real_test/A001_*.wav
+
+# ---------------------------------------------------------------------------
 # macOS
 # ---------------------------------------------------------------------------
 **/.DS_Store
