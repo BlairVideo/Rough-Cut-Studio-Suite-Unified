@@ -22,12 +22,22 @@ Security notes:
     for reading.
   * Started lazily (only when a preview is actually requested), and runs
     as a daemon thread that exits automatically when the app closes.
-  * No `Access-Control-Allow-Origin` header is sent -- the only consumer is
-    this app's own webview page loading a same-origin-equivalent local
-    <video> src, so there's no cross-origin case to support, and a wildcard
-    CORS header would only add surface for some other page open in a
-    browser on the same machine to probe this port if it ever guessed a
-    valid token.
+  * `Access-Control-Allow-Origin: *` IS sent (revised from this server's
+    original design, which assumed every consumer was a plain <video src>
+    same-origin-equivalent to the webview page). Colorize's WebGL preview
+    pipeline (colorize.js) draws the <video> element into a canvas via
+    texImage2D every frame -- the WHATWG/WebGL spec taints that canvas
+    (and texImage2D throws SecurityError) for ANY cross-origin media
+    lacking a CORS-allow response, and this server's random port is
+    always a different origin than pywebview's own bottle server hosting
+    the page. The wildcard is still safe here: this is a loopback-only,
+    read-only, token-gated server (see above) -- CORS only governs
+    whether a PAGE may read the response bytes/pixels back into JS, and
+    the only page that can ever reach 127.0.0.1's random port at all is
+    one already running on this same machine, which could read the file
+    directly off disk anyway. It grants no new access, only permission to
+    do something (read pixels off a video it's already receiving) that
+    was already trivially available another way.
 """
 
 import os
@@ -86,6 +96,7 @@ class _RangeRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", content_type)
             self.send_header("Accept-Ranges", "bytes")
             self.send_header("Content-Length", str(length))
+            self.send_header("Access-Control-Allow-Origin", "*")
             if status == 206:
                 self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
             self.end_headers()

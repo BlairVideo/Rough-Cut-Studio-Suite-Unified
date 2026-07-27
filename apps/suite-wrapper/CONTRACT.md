@@ -5161,3 +5161,378 @@ type=color>` + four sliders, following the `gxLogoCustomRow`/
 (`renderFormFromScene`, `gxToggleConditionalRows`, `bind`/`bindSlider`
 registrations). No backend contract changes — `brander_preview`/
 `brander_render_*` already pass the scene dict through opaquely.
+
+# Addendum v59 — feature: Colorize workspace (color grading, LUTs, in/out trim, batch export)
+
+New "Grade" tab: primary + secondary color correction/grading, `.cube`/
+`.3dl` LUT import and apply, per-clip in/out trimming, and single/batch
+export — for a video producer's flat/log-shot archive that needs
+color-corrected/graded before sharing. Follows the established
+mixin-per-workspace pattern (no plugin manifest exists in this suite);
+the one deliberate deviation is noted below.
+
+## New workspace member: `apps/colorize/`
+
+Pure-stdlib Python (no numpy/OpenCV/Pillow — auto-included by the root
+`pyproject.toml`'s `apps/*` glob, zero shared-venv pin conflicts):
+
+- **`grade.py`** — `GradeState` dataclass (exposure, contrast, temp/tint,
+  saturation/vibrance, lift/gamma/gain 3-way wheels, 8-band HSL
+  secondary, RGB+master curves, creative-LUT ref + intensity) and
+  `apply_grade_to_rgb(r, g, b, grade)`, the single source of truth for
+  the grade pipeline's math.
+- **`lut.py`** — `.cube`/`.3dl` parsing (3D LUTs only — 1D `.cube` files
+  raise `LutParseError`), trilinear `sample_lut`, and `to_preview_json`
+  (flat lattice for a WebGL texture upload).
+- **`ffmpeg_graph.py`** — export strategy: rather than hand-translating
+  every grade control into a chain of ffmpeg filters (risking
+  order-of-operations drift from the preview shader), `bake_grade_lut`
+  samples `apply_grade_to_rgb` (+ the creative LUT, blended by
+  `lut_intensity`) across a 33³ lattice into a `.cube` file, which
+  `run_export` applies via ffmpeg's own `lut3d` filter — guaranteeing
+  exported output matches previewed output exactly. `run_export` shells
+  out with `-progress pipe:1`, drains stderr on a separate thread
+  (mirrors `braw_bridge._run_proxy_tool`'s deadlock-avoidance reasoning),
+  and polls `cancel_event` once per stdout line.
+- **`project.py`** — `ColorizeClip`/`ColorizeProject`/`GradePreset`
+  dataclasses, JSON (de)serialization, schema-versioned
+  (`PROJECT_SCHEMA_VERSION`).
+- `tests/` — 49 pytest cases (grade math incl. clamping/curve-overshoot,
+  LUT parse/sample/round-trip, ffmpeg argv construction, progress-line
+  parsing, and `run_export` cancellation/error handling against an
+  injected fake `subprocess` module — no real ffmpeg binary needed to
+  test the graph builder itself).
+
+## `backend/colorize_bridge.py` + `backend/api_colorize.py` (`ColorizeMixin`)
+
+In-process (Brander pattern, not a subprocess worker — Colorize's core
+has no heavy deps to isolate): `colorize_bridge.py` does the
+`sys.path.insert(0, paths.COLORIZE_DIR)` bootstrap at import time (plus
+its own idempotent `RCS_BACKEND_DIR` bootstrap, since this module can be
+imported before `api_shared.py` has run one, depending on import order),
+then imports `grade`/`lut`/`ffmpeg_graph`/`project` bare — verified no
+existing top-level import of those generic names collided anywhere else
+in the suite before adding `COLORIZE_DIR` to `sys.path`.
+
+**Storage** (JSON sidecars under `assets/colorize/`, matching every
+workspace but CardEater — no shared SQLite/settings system exists):
+`projects/<id>.json`, `presets/<id>.json`, `luts/<id>.{cube,3dl}` (the
+original file, kept because export always bakes/samples against it, not
+a preview-only reduction) + `luts/<id>.json` (metadata) +
+`luts/<id>.preview.json` (cached flat lattice, so `colorize_list_luts`
+never re-parses).
+
+**Preview playback**: `colorize_bridge.get_preview_url(path)` reuses
+Rough Cut Studio's `preview_server.PreviewServer` (a small,
+dependency-free, loopback-only byte-range HTTP server —
+`apps/rough-cut-studio/backend/preview_server.py`) with Colorize's OWN
+separate instance/token map, not RCS's shared one, so removing a
+Colorize clip's token never touches RCS's Edit-workspace preview tokens.
+WKWebView can't reliably load local `file://` media into `<video>`;
+every other workspace with a live player already depends on this same
+server for that reason.
+
+**Export always reads the clip's original `source_path`**, never a
+preview proxy — same "export references original media" convention
+`braw_bridge.py` established for BRAW.
+
+Bridge method contract (all return `{"ok": bool, ...}`, never raise
+across the JS bridge):
+
+| Method | Request | Response |
+|---|---|---|
+| `colorize_pick_clips()` | — | `{clips: [probe...]}` (multi-select file dialog + ffprobe each) |
+| `colorize_probe_clip(path)` | path | `{clip: {path, duration_seconds, fps, width, height, codec}}` |
+| `colorize_get_preview_url(path)` | path | `{url}` — loopback URL for `<video src>` |
+| `colorize_pick_and_import_lut()` | — | `{lut: {id, name, size, ...}}` |
+| `colorize_list_luts()` | — | `{luts: [...]}` |
+| `colorize_get_lut_preview(lut_id)` | lut_id | `{lut: {size, title, data}}` — flat WebGL lattice |
+| `colorize_delete_lut(lut_id)` | lut_id | `{}` |
+| `colorize_new_project(name)` / `colorize_save_project(project_dict)` / `colorize_load_project(id)` / `colorize_list_projects()` / `colorize_delete_project(id)` | — | project dict / `{project_id}` / `{projects: [...]}` |
+| `colorize_save_preset(name, grade_dict)` / `colorize_list_presets()` / `colorize_delete_preset(id)` | — | preset dict / `{presets: [...]}` |
+| `colorize_pick_export_folder()` | — | `{folder}` |
+| `colorize_export_clip(clip_dict, output_path, output_preset)` | clip, path, `"share_h264"` \| `"archive_prores422"` | `{job_id}` |
+| `colorize_export_batch(clips, output_folder, output_preset)` | clips, folder, preset | `{queued: [{clip_id, output_path, job_id} \| {clip_id, error}]}` |
+
+Registered into `SuiteApi` (`suite_api.py`): `ColorizeMixin` added to the
+base list (order doesn't matter here — `colorize_*` method names can't
+collide with any other mixin's prefix). Export jobs run under
+`self.jobs.start_thread_job("colorize_export", ...)`, kind-limited to 2
+concurrent (`set_kind_limit`), so they appear in the shared Jobs drawer
+automatically with zero new progress-UI plumbing.
+
+## Frontend — deliberate deviation: separate `colorize.js` / `colorize.css`
+
+Every other workspace's JS lives as a section appended to `suite.js`
+(now ~7300 lines). Colorize's WebGL2 shader pipeline, curve editor, and
+scope rendering are substantial enough to warrant their own file rather
+than growing that monolith further — agreed with the user up front in
+the integration plan, not a unilateral drift. Coupling stays loose: no
+access to `suite.js`'s internal `call`/`$`/`toast`/`switchWs` closures
+(colorize.js duplicates small, self-contained versions of each — `$`,
+`call`, `toast` reusing the shared `#suiteToasts` DOM host and
+`.suite-toast--*`/`.suite-job__*` CSS classes for visual consistency).
+Visibility is a `CustomEvent("suite:workspace-changed", {detail:{ws}})`
+dispatched from `switchWs` (suite.js) — colorize.js listens for it to
+start/stop its WebGL render loop and pause `<video>` playback, exactly
+like every other workspace pauses on tab-away.
+
+**`main.py`'s `compose_page()`** gained two more copied/versioned assets
+(previously only `suite.css`/`suite.js` were): `colorize.css` and
+`colorize.js`, via new `{{COLORIZE_CSS_HREF}}`/`{{COLORIZE_JS_SRC}}`
+placeholders in `shell.html`, following the exact same
+`_versioned_name` content-hash cache-busting mechanism `suite.css`/
+`suite.js` already use (WebKit's shared NetworkCache can otherwise keep
+serving a stale script body across a full quit/relaunch). `selftest()`'s
+placeholder-left-unreplaced check extended to cover both.
+
+**`shell.html`**: `data-ws="colorize"` tab (label "Grade") +
+`#workspace-colorize` section — deliberately skeletal (media bin/
+transport/canvas/scope mount points + five empty `.cz-tab-panel`
+containers), all dynamic content (sliders, wheels, curve editor, HSL
+bands, LUT list, media bin, export queue) is rendered by colorize.js,
+matching every other workspace's "shell.html is structure, `*.js` fills
+it in" convention.
+
+**`suite.js`**: `"colorize"` added to `switchWs`'s hide-toggle array; the
+`suite:workspace-changed` dispatch (above) is the only other change —
+zero other suite.js internals touched.
+
+**`colorize.css`**: `#workspace-colorize` is a 3-column grid (260px
+media bin | 1fr preview+transport | 360px controls), self-contained
+(defines its own `[hidden]` override rather than editing suite.css's
+shared per-workspace selector list). Reuses suite.css's existing
+`--bg-*`/`--amber`/`--teal`/`--hairline`/`--font-*` tokens and
+`.suite-btn`/`.suite-field`/`.suite-job__*` component classes directly
+in colorize.js's generated markup — the workspace UI matches the rest of
+the suite's dark chrome, NOT Colorize's own project `CLAUDE.md`'s
+literal Athletic Blue/Warm Grey/Cool Grey triad (that triad is reserved
+for on-brand *output* graphics — e.g. Brander's title cards — never
+panel chrome, in every existing precedent app in this suite).
+
+**WebGL2 preview pipeline** (`initGL`/`FRAGMENT_SRC` in colorize.js): a
+`<video>` (hidden) feeds a GL texture via `texImage2D` each
+`requestAnimationFrame`; the fragment shader is a hand-kept GLSL
+translation of `grade.py`'s `apply_grade_to_rgb`, stage-for-stage
+(exposure → white balance → lift/gamma/gain → contrast → HSL bands +
+saturation/vibrance → curves via a 256×1 LUT texture → creative 3D LUT
+via `TEXTURE_3D`, native WebGL2, no tiled-2D fallback implemented).
+**If either `grade.py`'s pipeline or this shader changes, the other must
+be updated by hand to match** — there is no shared source for the two;
+export-side WYSIWYG parity instead comes from `ffmpeg_graph.py` baking
+the same Python function into a LUT (see above), not from the shader.
+Canvas backing-store resolution is capped at 1280px on its long edge
+(rendering/scope-readback cost, not display quality). Scopes
+(histogram/waveform/vectorscope) are computed from real `gl.readPixels`
+of the graded frame, throttled to ~180ms — not every frame — to keep
+playback smooth.
+
+**3-way wheels**: puck position and RGB offset are related by a
+zero-sum linear basis (`wheelToRgb`/`rgbToWheel`, `r+g+b === 0` always),
+matching real 3-way color-balance wheels — a wheel alone can shift color
+balance only, never uniform brightness; each wheel's own "Luminance"
+slider adds that separately (added back in on top of the zero-sum
+`wheelToRgb` result before being stored in `grade.lift`/`gamma`/`gain`).
+
+**Curves**: `evalCurve` in colorize.js is a hand-kept JS port of
+`grade.py`'s `_eval_curve` (Catmull-Rom, clamped to `[0,1]`) — kept in
+step by hand for the same WYSIWYG reason as the shader.
+
+## Verification
+
+- `uv sync` at repo root: `apps/colorize` picked up as a workspace
+  member via the `apps/*` glob, zero dependency conflicts (stdlib-only).
+- `uv run --package colorize pytest apps/colorize/tests`: 49 passed.
+- `uv run --package suite-wrapper python main.py --selftest`: 292
+  passed (was 229 before B-Roll-drawer-era count grew across
+  addenda — no regression; every prior test still passes with
+  `ColorizeMixin` composed into `SuiteApi`).
+- Real end-to-end smoke test (not just unit tests): a synthetic
+  `testsrc` clip through `colorize_bridge.export_clip` with exposure/
+  contrast/saturation grading and an in/out trim — output duration
+  matched the trim exactly (2.0s − 0.5s = 1.5s per `ffprobe`), and
+  sampled pixel values differed from the untouched source, confirming
+  the baked-LUT `lut3d` export path actually alters pixels rather than
+  just trimming.
+- `node --check colorize.js` passes; `main.py`'s `compose_page()` run
+  standalone confirms all seven placeholders (including the two new
+  Colorize ones) resolve with none left over in the generated HTML.
+- Browser-pane check against the real composed `_generated/index.html`
+  (served over a local HTTP preview, `window.pywebview.api` stubbed with
+  a catch-all `{ok:true}` proxy so `suite.js`'s `whenSuiteApiReady()`
+  gate resolves — normal in-browser testing can't get past that gate,
+  since it waits for the real `pywebviewready` event pywebview's native
+  shell fires): the Grade tab switches with zero console errors, all
+  five control panels (Basic/Wheels/Curves/HSL/LUT) render, the curve
+  editor's canvas paints real pixels (grid + identity diagonal + two
+  endpoint handles), the three wheels render their conic-gradient hue
+  wheels with centered pucks, and a slider drag safely no-ops (doesn't
+  throw) when no clip is loaded yet.
+
+## Still out of scope
+
+- Tiled-2D LUT texture fallback for a hypothetical WebGL2-without-
+  `TEXTURE_3D` environment — not implemented; `TEXTURE_3D` is core
+  WebGL2 (not an extension), so this is only a real gap on a WebKit
+  build old enough to lack WebGL2 entirely, in which case colorize.js
+  already surfaces a toast and disables live preview gracefully rather
+  than guessing at a fallback path never exercised against a real GPU.
+- Drag-to-reorder clips in the media bin (order is currently
+  import-order / `ColorizeClip.order`, editable only by re-importing).
+- BRAW proxy substitution for Colorize's own preview (the mechanism
+  `braw_bridge.py` provides for RCS/B-Roll/Sync was not wired into
+  Colorize's preview path — a `.braw` source will attempt to decode
+  directly, which may not work without the same proxy substitution
+  those workspaces use; export path is unaffected either way since it
+  always targets the original file).
+- Full interactive verification inside the real native pywebview shell
+  (WebGL preview actually playing a real video, wheel/curve dragging
+  against a live grade, and a real export triggered from the UI) was
+  not performed in this pass — the sandboxed environment this addendum
+  was authored in can drive a browser tab but not pywebview's native
+  window. The backend export pipeline itself WAS verified end-to-end
+  with real ffmpeg (see Verification above); what remains unverified is
+  specifically the UI-to-backend wiring inside the actual native shell.
+
+# Addendum v60 — fix: Colorize live preview never rendered any imported clip; layout rework (2/3 viewer, 1/3 controls, scopes as a side panel)
+
+## Bug: cross-origin WebGL texture upload silently killed the render loop
+
+Every imported clip's canvas stayed black. Root cause: `colorize.js`'s
+render loop draws the `<video>` element into a WebGL2 texture every
+frame via `texImage2D`. The video's `src` is a `colorize_get_preview_url`
+URL served by `colorize_bridge.py`'s own `PreviewServer` instance
+(`apps/rough-cut-studio/backend/preview_server.py`, reused with a
+separate token map — see Addendum v59), bound to its own random
+loopback port — a DIFFERENT origin than pywebview's own bottle server
+hosting the page. `texImage2D`/`texImage3D` on a cross-origin
+`<video>`/`<img>` with no CORS-allow response throws `SecurityError`
+("cross-origin data, and may not be loaded") by spec, and that throw was
+uncaught inside `renderLoop`'s body — which meant execution never
+reached the trailing `requestAnimationFrame(renderLoop)` call, so the
+ENTIRE render loop died silently after the first real frame attempt.
+Confirmed by direct reproduction (not just inferred): a standalone
+`PreviewServer` instance serving a real video on one port, a test page
+loaded from a different port, and a raw `texImage2D` call — throws the
+exact `SecurityError` above without `crossorigin="anonymous"` set on the
+video element; succeeds cleanly with it AND a server-side
+`Access-Control-Allow-Origin` header.
+
+**Fix, two halves (both required — either alone still fails):**
+- `preview_server.py`'s `_RangeRequestHandler.do_GET` now sends
+  `Access-Control-Allow-Origin: *`. Safe despite the wildcard: this
+  server is loopback-only, read-only (GET only), and every served path
+  is already gated behind an opaque per-file token (see the module's own
+  security notes, updated to explain the WebGL consumer case) — CORS
+  only governs whether a page may read pixels back from a resource it
+  already received, and the only page that can ever reach this random
+  127.0.0.1 port is one already running on this same machine, which
+  could read the file directly off disk anyway.
+- `shell.html`'s `<video id="czVideo">` gained `crossorigin="anonymous"`
+  (set in markup, before any `src` is ever assigned — changing
+  `crossOrigin` after a load has started doesn't reliably retro-fix an
+  already-tainted element).
+- Defense in depth, not part of the root-cause fix: `colorize.js`'s
+  `renderLoop` now wraps its body in try/catch. A future failure (a
+  codec WebGL can't texture-upload, some other unexpected throw) now
+  surfaces once as an error toast and the loop keeps retrying every
+  frame, instead of silently freezing forever with zero visible signal
+  — exactly the failure mode that made this bug hard to notice from the
+  UI alone.
+
+This fix benefits every Colorize preview going forward, and the CORS
+header change is shared code also used by RCS's own preview instance —
+harmless there since RCS's Edit-workspace player is a plain `<video>`
+tag with no canvas/WebGL involved, so cross-origin taint was never
+externally observable for that consumer.
+
+## Layout: 2/3 viewer row, 1/3 controls, scopes as a real side panel
+
+Per updated user request (three iterations since Addendum v59: reorder
+tabs, top/bottom split, two-panel top row, now 2/3–1/3 proportions +
+scopes-as-panel + a controls-layout pass). Also fixed along the way: the
+CSS grid/flex regressions reported as "everything stacks" across the
+last two iterations traced to a single root cause — colorize.css's very
+first file-header comment contained the literal substring `--bg-*/--amber`,
+whose embedded `*/` closed that comment four lines early. Every token
+from that early close through the NEXT real `*/` (a different, correctly
+-closed comment three lines later) was parsed as garbage CSS, which
+silently dropped the following rule from the stylesheet entirely (bounds
+-checked directly against `document.styleSheets[...].cssRules` — the
+base `#workspace-colorize { display: flex; ... }` rule was completely
+absent from the parsed sheet, `computedStyle(...).display` read `"block"`,
+so the three children fell back to normal block stacking regardless of
+which layout mechanism, grid or flex, was in the source). Rewrote the
+comment to avoid any `*/`-shaped substring and verified with a small
+brace/comment-balance scanner before treating any further layout change
+as trustworthy.
+
+- **`#workspace-colorize`**: `.cz-top-row` is `flex: 2 1 66.666%`,
+  `.cz-grade-controls` is `flex: 1 1 33.333%` (was 50/50).
+- **Scopes are now a real panel, not an absolutely-positioned overlay**:
+  new `.cz-viewer-row` (flex row) wraps `.cz-preview-wrap` (flex: 1) and
+  `.cz-scopes` (flex: none, 210px, `border-left`, each scope in its own
+  labeled `.cz-scope-block`) side by side; `.cz-transport` stays a
+  full-width sibling below both, unchanged in behavior. Scope canvases
+  scale to the panel's width via plain `width:100%; height:auto` — no JS
+  sizing needed for them (their internal pixel resolution, used for the
+  histogram/waveform/vectorscope math, is unrelated to their CSS display
+  size and untouched).
+- **`#czCanvas` scale-to-fit simplified**: was `max-width/max-height:100%`
+  PLUS a redundant, partially-dead-code manual JS scale calculation in
+  `resizeCanvasToVideo` (computed a `displayScale` variable that was
+  never used, then set `canvas.style.width` via a separate, differently
+  -capped formula, with no corresponding `style.height` at all). Replaced
+  with `width:auto; height:auto; max-width:100%; max-height:100%` — the
+  standard CSS pattern for a replaced element that preserves its
+  intrinsic aspect ratio while being capped to its container — and
+  `resizeCanvasToVideo` now only sets the canvas's backing-store pixel
+  resolution (capped at 1280px, for render/scope-readback cost), leaving
+  100% of the display-size fitting to CSS.
+- **Controls bar reworked from a vertical nav rail to a horizontal head
+  row**: `.cz-controls-head` (title + `.cz-tabs`, now a horizontal row
+  again + `.cz-controls-head__actions` housing Reset Grade/preset name
+  input/Save/Load-preset select all inline) sits above `.cz-controls-main`
+  (the active tab panel, flex:1, scrolling if needed). This reclaims
+  height for the panel/slider-grid content now that the whole bar is
+  only 1/3 of the screen rather than 1/2, and consolidates what was
+  previously three stacked rows (Reset button, preset-name+Save row,
+  preset-select row) into one. The curve editor's canvas cap shrank
+  320px → 220px to comfortably fit the shorter panel.
+
+## Verification
+
+- `node --check colorize.js` passes; a brace/comment-balance scanner
+  confirms colorize.css has zero unclosed comments or unbalanced braces
+  (the exact class of bug that caused the layout regression above).
+- `uv run --package colorize pytest apps/colorize/tests`: 49 passed
+  (unaffected — this addendum touched no Python grading/export logic).
+- `uv run --package suite-wrapper python main.py --selftest`: 292
+  passed, zero regressions.
+- **Direct CORS reproduction** (see Bug section): confirmed both the
+  failure (`SecurityError` without `crossorigin`) and the fix (clean
+  `texImage2D`/`glGetError()===0` with `crossorigin="anonymous"` + the
+  server's new header) against a real standalone `PreviewServer`
+  instance and a real ffmpeg-generated test video, from a genuinely
+  different origin (a second local HTTP server on a different port).
+- **Full end-to-end browser verification with a real video**: composed
+  the real page, stubbed `window.pywebview.api` to return an actual
+  cross-origin preview URL for a real test clip, imported it through the
+  UI, and confirmed the SMPTE color-bars test pattern rendered correctly
+  in the WebGL canvas — then dragged the Saturation slider to -100 live
+  and confirmed the canvas, histogram, and waveform all updated
+  correctly to a desaturated (greyscale) result in real time. This is
+  the first pass verifying the live grading pipeline against an actual
+  decoded video frame, not just a black canvas or synthetic uniforms.
+- Confirmed the 2/3–1/3 split, scopes-as-side-panel, and reworked
+  controls head all render as intended in the same session, with zero
+  console errors across every control tab.
+
+## Still out of scope (unchanged from v59, plus one addition)
+
+Everything listed in Addendum v59's "Still out of scope" still applies.
+Additionally: real interactive verification inside the native pywebview
+shell (as opposed to a stubbed-API browser check) still has not been
+performed — everything above was verified as rigorously as this
+sandboxed environment allows, but a first real launch is still worth a
+quick manual pass.

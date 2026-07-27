@@ -258,12 +258,18 @@
   // NEVER intercepted when the Edit workspace is active or the event target
   // sits inside #workspace-edit (RCS owns those); text fields keep their
   // native undo (our editor fields commit on change, so an uncommitted edit
-  // is exactly what native undo should operate on).
+  // is exactly what native undo should operate on). Colorize is the same
+  // deal as Edit: colorize.js owns a real per-clip undo/redo stack via its
+  // own window-level (bubble) keydown listener -- this router must stay out
+  // of its way entirely, not just skip a branch for it, since colorize.js
+  // isn't one of the S.ws-routed domains below and swallowing the keystroke
+  // here (preventDefault + stopPropagation, then nothing) is a straight
+  // dead end for a Colorize slider drag with no undo domain to hand it to.
   function wireSuiteUndoKeys() {
     document.addEventListener("keydown", (e) => {
       const cmdOrCtrl = e.metaKey || e.ctrlKey;
       if (!cmdOrCtrl || e.key.toLowerCase() !== "z") return;
-      if (S.ws === "edit") return; // RCS owns undo there
+      if (S.ws === "edit" || S.ws === "colorize") return; // RCS / colorize.js own undo there
       const t = e.target;
       if (t && t.closest && t.closest("#workspace-edit")) return;
       const tag = t && t.tagName;
@@ -288,7 +294,7 @@
       b.classList.toggle("is-active", active);
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
-    ["cardeater", "sync", "transcribe", "broll", "edit", "harmonize", "graphics"].forEach((ws) => {
+    ["cardeater", "sync", "transcribe", "broll", "edit", "harmonize", "colorize", "graphics"].forEach((ws) => {
       const c = $("workspace-" + ws);
       if (c) c.hidden = ws !== name; // display toggle only — #workspace-edit is never unmounted
     });
@@ -308,6 +314,13 @@
     if (name !== "graphics") gxStopPlayback();
     if (name !== "sync") teardownSyncPlayer();
     if (name !== "transcribe") closeTedPlayer();
+    // colorize.js is a separate top-level script (its WebGL shader
+    // pipeline/curve editor/scopes warranted their own file rather than
+    // growing this one further — see CONTRACT.md's Colorize section), so
+    // it can't reach this closure's internals. A DOM event is the loosest
+    // coupling that still lets it start/stop its render loop and pause
+    // video playback exactly when every other workspace pauses its own.
+    document.dispatchEvent(new CustomEvent("suite:workspace-changed", { detail: { ws: name } }));
   }
 
   // ---------------- jobs: polling, badge, drawer ----------------

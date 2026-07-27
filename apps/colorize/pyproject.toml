@@ -1,0 +1,9 @@
+[project]
+name = "colorize"
+version = "0.1.0"
+description = "Color correction/grading workspace: primary + secondary grading, LUT import/apply, in/out trimming, single and batch export. Pure stdlib -- pixel math is shared between the ffmpeg export path and the JSON payload the WebGL preview shader consumes."
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]

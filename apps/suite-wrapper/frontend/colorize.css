@@ -1,0 +1,643 @@
+/* colorize.css — Grade workspace layout and controls.
+   Scoped entirely under #workspace-colorize / .cz-* so it never touches
+   any other workspace's styling; reuses suite.css's existing design
+   tokens (--bg-void, --bg-panel, --amber, --teal, --hairline, --font-*)
+   and its shared .suite-btn/.suite-field/.suite-job__* component
+   classes directly in colorize.js's generated markup, rather than
+   redefining them here. */
+
+/* Top 2/3: media bin (list) + viewer side by side, in an explicit
+   .cz-top-row wrapper. Bottom 1/3: grade controls, full width, as a
+   sibling of that wrapper. Plain nested flexbox rather than a CSS Grid
+   with grid-template-areas spanning three flat siblings — more robust
+   and unambiguous about which two elements sit side by side. */
+#workspace-colorize {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#workspace-colorize[hidden] { display: none; }
+
+.cz-top-row {
+  flex: 2 1 66.666%;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.suite-controls--colorize-bin {
+  flex: none;
+  width: 340px;
+  padding: 16px;
+  gap: 14px;
+  min-height: 0;
+}
+
+/* ---------------- media bin ---------------- */
+
+.cz-media-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cz-media-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: var(--bg-input);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.cz-media-item:hover { border-color: var(--hairline); color: var(--text-primary); }
+.cz-media-item.is-active { border-color: var(--amber); color: var(--text-primary); background: var(--amber-dim); }
+.cz-media-item.is-selected { border-color: var(--teal); }
+
+.cz-media-item__check {
+  flex: none;
+  accent-color: var(--teal);
+}
+
+.cz-media-item__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cz-media-item__meta {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.cz-media-item__lut-badge {
+  flex: none;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+/* ---------------- center: preview + transport ---------------- */
+
+.cz-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-void);
+}
+
+/* Viewer + scopes side by side (scopes are their own panel, not an
+   overlay on top of the video), transport bar spans the full width
+   below both. */
+.cz-viewer-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.cz-preview-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+#czVideo { display: none; }
+
+/* Scale-to-fit: the canvas keeps its own intrinsic pixel size (set from
+   the source video's aspect ratio in resizeCanvasToVideo) and CSS scales
+   it down to fit the available space, preserving aspect ratio, without
+   any manual JS pixel math. */
+#czCanvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.cz-scopes {
+  flex: none;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px 16px 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--hairline);
+  margin-left: 4px;
+}
+.cz-scope-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.cz-scope-block__label {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.cz-scopes canvas {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  background: rgba(16, 17, 22, .82);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+.cz-transport {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg-panel);
+}
+
+.cz-compare-toggles {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 4px;
+  border-left: 1px solid var(--hairline);
+}
+.cz-compare-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.cz-compare-toggle input[type="checkbox"] {
+  accent-color: var(--amber);
+  cursor: pointer;
+}
+
+.cz-timecode {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: none;
+  min-width: 92px;
+}
+
+.cz-scrub {
+  position: relative;
+  flex: 1;
+  height: 26px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.cz-scrub__range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: var(--amber-dim);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+.cz-scrub__playhead {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--amber);
+  pointer-events: none;
+}
+
+.cz-scrub__handle {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 8px;
+  margin-left: -4px;
+  background: var(--teal);
+  border-radius: 2px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+.cz-scrub__handle--in { background: var(--teal); }
+.cz-scrub__handle--out { background: var(--danger); }
+
+/* ---------------- bottom: grade controls (full width) ---------------- */
+
+.cz-grade-controls {
+  flex: 1 1 33.333%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 20px 16px;
+  width: 100%;
+  border-right: none;           /* was the right-hand sidebar; now a full-width bottom bar */
+  border-top: 1px solid var(--hairline);
+  min-height: 0;
+  overflow: hidden;
+  /* Sizes from the flex layout above (definite height, not content-derived)
+     -- safe to also make it a query container so the tab content below can
+     react to how much vertical room it's actually been given, rather than
+     to fixed pixel sizes that only fit one window size. */
+  container-type: size;
+  container-name: cz-controls;
+}
+
+/* Title + tabs + reset/preset actions all in one row along the top of
+   the controls bar — horizontal, not a vertical nav rail, since this
+   panel is now short and wide (1/3 of the screen height) rather than
+   tall and narrow. */
+.cz-controls-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.cz-controls-head .suite-panel-title { flex: none; }
+
+.cz-controls-head__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cz-controls-head__actions select,
+.cz-controls-head__actions .cz-preset-name-input {
+  height: 28px;
+}
+.cz-controls-head__actions select {
+  max-width: 150px;
+}
+
+.cz-controls-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.cz-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.cz-tab {
+  flex: 1 0 auto;
+  text-align: center;
+  padding: 7px 14px;
+  font-size: 11px;
+  font-family: var(--font-display);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.cz-tab:hover { color: var(--text-primary); }
+.cz-tab.is-active { color: #1B140A; background: var(--amber); border-color: var(--amber); }
+
+.cz-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+/* Higher specificity than .cz-tab-panel's own display:flex (equal-specificity
+   author rules lose to source order, not to the UA [hidden]{display:none}
+   default) -- without this, every non-active panel (Wheels/HSL/LUT) still
+   lays out and stacks inside .cz-controls-main, forcing a scrollbar
+   regardless of which tab is actually showing. */
+.cz-tab-panel[hidden] {
+  display: none;
+}
+
+/* HSL panel holds several independent sliders — lay them out in a
+   responsive multi-column grid instead of one tall stack now that the
+   controls bar is wide and short rather than narrow and tall. */
+#czHslSliders {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 28px;
+  align-content: start;
+}
+
+/* Basic & Curves is a combined tab: the tone/color sliders on the left,
+   the curve editor pinned to a fixed width on the right, so dragging a
+   curve point and nudging a slider are both reachable without switching
+   tabs -- the two are the most-iterated-on controls in a typical grade. */
+.cz-tab-panel--basic {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 24px;
+}
+.cz-basic-sliders {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 10px 28px;
+  align-content: start;
+}
+.cz-basic-curves {
+  flex: 0 0 33.333%;
+  max-width: 33.333%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cz-preset-name-input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+/* basic sliders */
+
+.cz-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cz-slider-row__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.cz-slider-row__value {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.cz-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--amber);
+}
+.cz-slider-row__reset {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+}
+.cz-slider-row__reset:hover { color: var(--amber); }
+
+/* color wheels (3-way: lift / gamma / gain) */
+
+.cz-wheels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.cz-wheel-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.cz-wheel-block__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cz-wheel-block__label {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.cz-wheel-block__reset {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.cz-wheel-block__reset:hover { color: var(--amber); }
+.cz-wheel {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    radial-gradient(circle, rgba(30, 31, 38, .92) 0%, rgba(30, 31, 38, .55) 55%, transparent 72%),
+    conic-gradient(from 90deg, #e0433c, #e0a23c, #d9e03c, #63e03c, #3ce0b0, #3c8fe0, #6b3ce0, #c93ce0, #e0433c);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+.cz-wheel__puck {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5);
+  pointer-events: none;
+}
+.cz-wheel-block input[type="range"] {
+  width: 160px;
+  accent-color: var(--teal);
+}
+
+/* curve editor */
+
+.cz-curve-channels {
+  display: flex;
+  gap: 4px;
+}
+.cz-curve-channels button {
+  flex: 1;
+  padding: 4px;
+  font-size: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.cz-curve-channels button.is-active { background: var(--bg-panel-raised); color: var(--text-primary); border-color: var(--amber); }
+.cz-curve-channels__reset { flex: none !important; padding: 4px 8px !important; }
+#czCurveCanvas {
+  /* Fixed height (not aspect-ratio-derived) so a wide 1/3-of-panel column
+     doesn't blow up the canvas into a tall square that forces the whole
+     Basic & Curves tab to scroll -- a short, wide grid is the trade-off. */
+  width: 100%;
+  height: 170px;
+  max-height: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: crosshair;
+}
+
+/* HSL bands */
+
+.cz-hsl-bands {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.cz-hsl-band-btn {
+  height: 24px;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.cz-hsl-band-btn.is-active { border-color: var(--text-primary); }
+
+/* LUT panel */
+
+.cz-lut-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.cz-lut-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--bg-input);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.cz-lut-item:hover { color: var(--text-primary); }
+.cz-lut-item.is-active { border-color: var(--amber); color: var(--text-primary); }
+.cz-lut-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cz-lut-item__remove {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.cz-lut-item__remove:hover { color: var(--danger); }
+
+/* export jobs (mirrors .suite-job__* markup/classes from suite.css) */
+
+.cz-export-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* ---------------- responsive: shrink the controls bar's content to fit
+   whatever height it's actually been given, instead of clipping/scrolling
+   at smaller window sizes. Queries against .cz-grade-controls's own box
+   (container-type:size, above), not the viewport -- the bar's share of
+   the window is a fixed flex fraction, so its available height doesn't
+   track viewport height 1:1. ---------------- */
+
+/* Basic's slider grid always stays at 2 columns (5 rows of 10 fields) --
+   never escalates to 3+ columns as the container shrinks. A narrower
+   window should make each row shorter, not rearrange the grid into a
+   wide, short block; each tier below shrinks row height (label
+   font-size, range-input height, gaps) instead of adding columns. */
+@container cz-controls (max-height: 300px) {
+  .cz-controls-head { gap: 12px; }
+  .cz-tab-panel { gap: 6px; padding-top: 6px; }
+  .cz-basic-sliders { grid-template-columns: repeat(2, minmax(140px, 1fr)); gap: 6px 20px; }
+  .cz-slider-row { gap: 3px; }
+  .cz-basic-curves { gap: 6px; }
+  #czCurveCanvas { height: 100px; }
+  .cz-wheels { gap: 6px; }
+  .cz-wheel { width: 110px; height: 110px; }
+  .cz-wheel-block input[type="range"] { width: 110px; }
+}
+
+@container cz-controls (max-height: 210px) {
+  .cz-tab { padding: 4px 10px; }
+  .cz-tab-panel { padding-top: 1px; }
+  .cz-basic-sliders { grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 1px 16px; }
+  .cz-slider-row { gap: 0; }
+  .cz-slider-row__head { font-size: 9px; line-height: 1.2; }
+  .cz-slider-row input[type="range"] { height: 10px; }
+  .cz-basic-curves .suite-hint { display: none; }
+  #czCurveCanvas { height: 70px; }
+  .cz-curve-channels button { padding: 2px; }
+  .cz-wheel { width: 84px; height: 84px; }
+  .cz-wheel-block input[type="range"] { width: 84px; }
+}
+
+@container cz-controls (max-height: 160px) {
+  .cz-controls-head { gap: 6px; }
+  .suite-panel-title { display: none; }
+  .cz-tab { padding: 2px 8px; font-size: 10px; }
+  .cz-tab-panel { padding-top: 1px; gap: 4px; }
+  .cz-basic-sliders { grid-template-columns: repeat(2, minmax(100px, 1fr)); gap: 0 12px; }
+  .cz-slider-row { gap: 0; }
+  .cz-slider-row__head { font-size: 9px; line-height: 1.1; }
+  .cz-slider-row__reset { font-size: 9px; padding: 0; }
+  .cz-slider-row input[type="range"] { height: 8px; margin: 0; }
+  .cz-basic-curves { gap: 4px; }
+  #czCurveCanvas { height: 40px; }
+  .cz-curve-channels button { padding: 1px; font-size: 9px; }
+  .cz-wheel { width: 64px; height: 64px; }
+  .cz-wheel-block input[type="range"] { width: 64px; }
+}

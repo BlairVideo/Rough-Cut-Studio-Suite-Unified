@@ -5,6 +5,7 @@
 <title>Rough Cut Studio Suite</title>
 {{RCS_HEAD_LINKS}}
 <link rel="stylesheet" href="{{SUITE_CSS_HREF}}" />
+<link rel="stylesheet" href="{{COLORIZE_CSS_HREF}}" />
 </head>
 <body>
 
@@ -21,6 +22,7 @@
       <button class="suite-ws-tab" data-ws="broll" role="tab" aria-selected="false">B-Roll</button>
       <button class="suite-ws-tab" data-ws="edit" role="tab" aria-selected="false">Edit</button>
       <button class="suite-ws-tab" data-ws="harmonize" role="tab" aria-selected="false">Harmonize</button>
+      <button class="suite-ws-tab" data-ws="colorize" role="tab" aria-selected="false">Grade</button>
       <button class="suite-ws-tab" data-ws="graphics" role="tab" aria-selected="false">Graphics</button>
     </nav>
     <div class="suite-topbar-right">
@@ -658,6 +660,125 @@
     </div>
   </section>
 
+  <!-- ================= Grade (Colorize) workspace ================= -->
+  <!-- Deliberately skeletal: colorize.js owns every dynamic panel (basic
+       sliders, wheels, curve editor, HSL bands, LUT list, media bin,
+       export queue) — this markup is just the fixed layout + mount
+       points, matching every other workspace's "shell.html is structure,
+       *.js fills it in" convention. -->
+  <section id="workspace-colorize" class="suite-ws suite-ws--colorize" hidden>
+   <div class="cz-top-row">
+    <aside class="suite-controls suite-controls--colorize-bin">
+      <h2 class="suite-panel-title">Colorize</h2>
+      <p class="suite-hint">Import clips, set in/out points, grade, and export — individually or as a batch.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Project</h3>
+        <div style="display:flex; gap:6px;">
+          <select id="czProjectSelect" style="flex:1;"><option value="">New project…</option></select>
+          <button class="suite-btn suite-btn--ghost suite-btn--small" id="czSaveProjectBtn">Save</button>
+        </div>
+      </div>
+
+      <div class="suite-block" style="min-height:0; flex:1; display:flex; flex-direction:column;">
+        <h3 class="suite-block-title">Media</h3>
+        <button class="suite-btn suite-btn--secondary suite-btn--small" id="czPickClipsBtn">Import Clips…</button>
+        <ul class="cz-media-list" id="czMediaList"></ul>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Batch</h3>
+        <button class="suite-btn suite-btn--ghost suite-btn--small" id="czCopyGradeBtn">Copy Grade to Selected</button>
+        <button class="suite-btn suite-btn--ghost suite-btn--small" id="czApplyLutSelectedBtn">Apply LUT to Selected</button>
+      </div>
+
+      <div class="suite-block suite-aside-bottom">
+        <h3 class="suite-block-title">Export</h3>
+        <label class="suite-field">
+          <span>Delivery preset</span>
+          <select id="czExportPreset">
+            <option value="share_h264">Share (H.264 MP4)</option>
+            <option value="archive_prores422">Archive (ProRes 422)</option>
+          </select>
+        </label>
+        <div style="display:flex; gap:6px;">
+          <button class="suite-btn suite-btn--primary suite-btn--small" id="czExportSelectedBtn" style="flex:1;">Export Selected</button>
+          <button class="suite-btn suite-btn--primary suite-btn--small" id="czExportAllBtn" style="flex:1;">Export All</button>
+        </div>
+        <div id="czExportJobs" class="cz-export-jobs"></div>
+      </div>
+    </aside>
+
+    <div class="cz-main">
+      <div class="cz-viewer-row">
+        <div class="cz-preview-wrap" id="czPreviewWrap">
+          <video id="czVideo" playsinline muted preload="auto" crossorigin="anonymous"></video>
+          <canvas id="czCanvas"></canvas>
+        </div>
+        <div class="cz-scopes" id="czScopes">
+          <div class="cz-scope-block">
+            <span class="cz-scope-block__label">Histogram</span>
+            <canvas id="czHistogram" width="260" height="120" title="Histogram"></canvas>
+          </div>
+          <div class="cz-scope-block">
+            <span class="cz-scope-block__label">Waveform</span>
+            <canvas id="czWaveform" width="260" height="120" title="Waveform"></canvas>
+          </div>
+          <div class="cz-scope-block">
+            <span class="cz-scope-block__label">Vectorscope</span>
+            <canvas id="czVectorscope" width="260" height="260" title="Vectorscope"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="cz-transport">
+        <button class="suite-btn suite-btn--small" id="czPlayBtn" aria-label="Play/pause">▶</button>
+        <span class="cz-timecode" id="czTimecode">00:00:00.000</span>
+        <div class="cz-scrub" id="czScrub">
+          <div class="cz-scrub__range" id="czScrubRange"></div>
+          <div class="cz-scrub__handle cz-scrub__handle--in" id="czInHandle" title="In point"></div>
+          <div class="cz-scrub__handle cz-scrub__handle--out" id="czOutHandle" title="Out point"></div>
+          <div class="cz-scrub__playhead" id="czScrubPlayhead"></div>
+        </div>
+        <button class="suite-btn suite-btn--small" id="czSetInBtn" title="Set in point ([)">[</button>
+        <button class="suite-btn suite-btn--small" id="czSetOutBtn" title="Set out point (])">]</button>
+        <div class="cz-compare-toggles" title="Check both for a split-screen compare">
+          <label class="cz-compare-toggle"><input type="checkbox" id="czShowBeforeChk"> Before</label>
+          <label class="cz-compare-toggle"><input type="checkbox" id="czShowAfterChk" checked> After</label>
+        </div>
+      </div>
+    </div>
+   </div>
+
+    <aside class="suite-controls cz-grade-controls">
+      <div class="cz-controls-head">
+        <h2 class="suite-panel-title">Controls</h2>
+        <nav class="cz-tabs" id="czControlTabs">
+          <button class="cz-tab is-active" data-tab="basic" type="button">Basic &amp; Curves</button>
+          <button class="cz-tab" data-tab="wheels" type="button">Wheels</button>
+          <button class="cz-tab" data-tab="hsl" type="button">HSL</button>
+          <button class="cz-tab" data-tab="lut" type="button">LUT</button>
+        </nav>
+        <div class="cz-controls-head__actions">
+          <button class="suite-btn suite-btn--ghost suite-btn--small" id="czUndoBtn" title="Undo (Cmd+Z)" disabled>↺ Undo</button>
+          <button class="suite-btn suite-btn--ghost suite-btn--small" id="czRedoBtn" title="Redo (Cmd+Shift+Z)" disabled>↻ Redo</button>
+          <button class="suite-btn suite-btn--ghost suite-btn--small" id="czResetGradeBtn">Reset Grade</button>
+          <input type="text" id="czPresetName" placeholder="Preset name" class="cz-preset-name-input">
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="czSavePresetBtn">Save</button>
+          <select id="czPresetSelect"><option value="">Load preset…</option></select>
+        </div>
+      </div>
+      <div class="cz-controls-main">
+        <div class="cz-tab-panel cz-tab-panel--basic" data-panel="basic" id="czPanelBasic">
+          <div id="czBasicSliders" class="cz-basic-sliders"></div>
+          <div id="czPanelCurves" class="cz-basic-curves"></div>
+        </div>
+        <div class="cz-tab-panel" data-panel="wheels" id="czPanelWheels" hidden></div>
+        <div class="cz-tab-panel" data-panel="hsl" id="czPanelHsl" hidden></div>
+        <div class="cz-tab-panel" data-panel="lut" id="czPanelLut" hidden></div>
+      </div>
+    </aside>
+  </section>
+
   <!-- ================= Edit workspace (Rough Cut Studio, untouched) ================= -->
   <div id="workspace-edit" class="suite-ws" hidden>
 {{RCS_BODY}}
@@ -787,5 +908,6 @@
 
   <script src="{{RCS_APPJS_SRC}}"></script>
   <script src="{{SUITE_JS_SRC}}"></script>
+  <script src="{{COLORIZE_JS_SRC}}"></script>
 </body>
 </html>

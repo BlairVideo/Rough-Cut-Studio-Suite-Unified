@@ -37,6 +37,7 @@ try:
     from .api_cardeater import CardEaterMixin, CardEaterState
     from .api_harmonize import HarmonizeMixin
     from .api_pipeline import PipelineMixin
+    from .api_colorize import ColorizeMixin
     from . import cardeater_copy, notify
 except ImportError:  # pragma: no cover — direct script import in tests
     import paths
@@ -58,6 +59,7 @@ except ImportError:  # pragma: no cover — direct script import in tests
     from api_cardeater import CardEaterMixin, CardEaterState
     from api_harmonize import HarmonizeMixin
     from api_pipeline import PipelineMixin
+    from api_colorize import ColorizeMixin
     import cardeater_copy
     import notify
 
@@ -73,11 +75,11 @@ from api import Api       # noqa: E402  (Rough Cut Studio's Api)
 
 class SuiteApi(SecurityMixin, TranscriberMixin, BrollMixin, FavoritesMixin,
                SyncMixin, BranderMixin, CardEaterMixin, HarmonizeMixin,
-               PipelineMixin, Api):
+               PipelineMixin, ColorizeMixin, Api):
     """Composed js_api (contract A-1): each workspace's methods live in
     its own mixin module (api_security / api_transcriber / api_broll /
     api_favorites / api_sync / api_brander / api_cardeater /
-    api_harmonize / api_pipeline). RCS's Api is
+    api_harmonize / api_pipeline / api_colorize). RCS's Api is
     LAST in the MRO, so every mixin override of an inherited method
     (SecurityMixin's key/autosave/transcript-path overrides, this class's
     save_xml) wins, and their super() calls fall through to RCS unchanged.

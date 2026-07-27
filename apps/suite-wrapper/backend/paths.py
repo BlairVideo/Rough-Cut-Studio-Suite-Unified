@@ -22,6 +22,7 @@ IVT_DIR = os.path.join(PARENT_DIR, "interview-transcriber")
 BROLL_DIR = os.path.join(PARENT_DIR, "broll-analyzer")
 BRANDER_DIR = os.path.join(PARENT_DIR, "blair-brander")
 ASYNC_DIR = os.path.join(PARENT_DIR, "a-sync")
+COLORIZE_DIR = os.path.join(PARENT_DIR, "colorize")
 HARMONIZER_DIR = os.path.join(PARENT_DIR, "harmonizer")
 # Renamed from HARMONIZER_PROTOTYPE_DIR ("prototype/") during the Phase 2
 # migration — this is the real alignment/FCPXML engine, not scratch code.
@@ -68,6 +69,16 @@ PROXIES_DIR = os.path.join(ASSETS_DIR, "proxies")
 FAVORITES_FILE = os.path.join(ASSETS_DIR, "favorites.json")
 CARDEATER_DB = os.path.join(ASSETS_DIR, "cardeater.sqlite3")
 
+# Colorize workspace: JSON sidecars, matching every other workspace's
+# storage convention (no shared SQLite/settings system exists in this
+# suite outside CardEater's own DB). LUTS_DIR holds both the original
+# imported .cube/.3dl file and its cached WebGL-preview JSON per LUT id.
+COLORIZE_ASSETS_DIR = os.path.join(ASSETS_DIR, "colorize")
+COLORIZE_PROJECTS_DIR = os.path.join(COLORIZE_ASSETS_DIR, "projects")
+COLORIZE_PRESETS_DIR = os.path.join(COLORIZE_ASSETS_DIR, "presets")
+COLORIZE_LUTS_DIR = os.path.join(COLORIZE_ASSETS_DIR, "luts")
+COLORIZE_EXPORTS_TMP_DIR = os.path.join(COLORIZE_ASSETS_DIR, "tmp")
+
 # pywebview's WKWebView/BottleServer data store (localStorage, etc.) --
 # passed to webview.start(storage_path=...) so per-workspace settings
 # (suite.js's saveTranscriberSettings/saveBrollSettings/saveRcsSettings,
@@ -100,5 +111,6 @@ def ensure_suite_dirs():
     cached BRAW proxies, and _generated holds the composed index.html
     rebuilt at every launch."""
     for d in (GENERATED_DIR, TRANSCRIPTS_DIR, GRAPHICS_DIR, LOGOS_DIR, PROXIES_DIR, IVT_CACHE_DIR,
-              WEBVIEW_STORAGE_DIR):
+              WEBVIEW_STORAGE_DIR, COLORIZE_PROJECTS_DIR, COLORIZE_PRESETS_DIR,
+              COLORIZE_LUTS_DIR, COLORIZE_EXPORTS_TMP_DIR):
         os.makedirs(d, exist_ok=True)

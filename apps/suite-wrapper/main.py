@@ -155,9 +155,13 @@ def compose_page():
     rcs_appjs_path = os.path.join(paths.RCS_FRONTEND_DIR, "app.js")
     suite_css_path = os.path.join(paths.FRONTEND_DIR, "suite.css")
     suite_js_path = os.path.join(paths.FRONTEND_DIR, "suite.js")
+    colorize_css_path = os.path.join(paths.FRONTEND_DIR, "colorize.css")
+    colorize_js_path = os.path.join(paths.FRONTEND_DIR, "colorize.js")
     copies[rcs_appjs_path] = "rcs-app.js"
     copies[suite_css_path] = "suite.css"
     copies[suite_js_path] = "suite.js"
+    copies[colorize_css_path] = "colorize.css"
+    copies[colorize_js_path] = "colorize.js"
 
     shell_path = os.path.join(paths.FRONTEND_DIR, "shell.html")
     if os.path.exists(shell_path):
@@ -176,7 +180,9 @@ def compose_page():
             .replace("{{RCS_BODY}}", body_html)
             .replace("{{RCS_APPJS_SRC}}", _versioned_name("rcs-app.js", rcs_appjs_path))
             .replace("{{SUITE_CSS_HREF}}", _versioned_name("suite.css", suite_css_path))
-            .replace("{{SUITE_JS_SRC}}", _versioned_name("suite.js", suite_js_path)))
+            .replace("{{SUITE_JS_SRC}}", _versioned_name("suite.js", suite_js_path))
+            .replace("{{COLORIZE_CSS_HREF}}", _versioned_name("colorize.css", colorize_css_path))
+            .replace("{{COLORIZE_JS_SRC}}", _versioned_name("colorize.js", colorize_js_path)))
 
     for src, name in copies.items():
         shutil.copy2(src, os.path.join(paths.GENERATED_DIR, name))
@@ -210,7 +216,8 @@ def selftest():
         with open(page, "r", encoding="utf-8") as f:
             content = f.read()
         for placeholder in ("{{RCS_HEAD_LINKS}}", "{{RCS_BODY}}", "{{RCS_APPJS_SRC}}",
-                            "{{SUITE_CSS_HREF}}", "{{SUITE_JS_SRC}}"):
+                            "{{SUITE_CSS_HREF}}", "{{SUITE_JS_SRC}}",
+                            "{{COLORIZE_CSS_HREF}}", "{{COLORIZE_JS_SRC}}"):
             assert placeholder not in content, f"placeholder left unreplaced: {placeholder}"
     except Exception:
         traceback.print_exc()
