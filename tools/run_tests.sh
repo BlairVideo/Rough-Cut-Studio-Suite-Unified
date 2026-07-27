@@ -34,13 +34,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Workspace members with a pytest suite (pytest.ini + tests/), by
 # directory name under apps/ (which matches each member's uv package
-# name for all six of these). Members without either (harmonizer-
-# backend, rcs-utils) are skipped -- there's nothing for pytest to
-# collect there yet.
+# name for all seven of these). Members without either (harmonizer-
+# backend, spyglass/crates/spyglass-py, rcs-utils) are skipped -- there's
+# nothing for pytest to collect there yet.
 MEMBERS=(
   a-sync
   blair-brander
   broll-analyzer
+  colorize
   interview-transcriber
   rough-cut-studio
   suite-wrapper
