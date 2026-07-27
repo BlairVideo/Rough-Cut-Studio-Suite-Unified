@@ -1,5 +1,13 @@
 [tool.uv.workspace]
-members = ["apps/*", "apps/harmonizer/backend", "packages/utils"]
-# apps/harmonizer (the Tauri/React UI shell) has no pyproject.toml -- only
-# its backend/ subdirectory (added explicitly above) is a Python member.
-exclude = ["apps/harmonizer"]
+members = ["apps/*", "apps/harmonizer/backend", "apps/spyglass/crates/spyglass-py", "packages/utils"]
+# apps/harmonizer and apps/spyglass (both Tauri/React UI shells) have no
+# pyproject.toml at their own root -- only their "real engine" subdirectory
+# is a Python member: harmonizer/backend is a plain Python package,
+# spyglass/crates/spyglass-py is a PyO3/maturin extension (its own
+# pyproject.toml has `build-backend = "maturin"`, so `uv sync` builds AND
+# installs the compiled `spyglass_core` module as part of a normal sync --
+# no separate manual `maturin develop` step needed, and critically, `uv
+# sync` will NOT uninstall it as an "unmanaged" package the way it would a
+# module only ever installed by hand). See
+# apps/suite-wrapper/backend/spyglass_bridge.py for the actual integration.
+exclude = ["apps/harmonizer", "apps/spyglass"]

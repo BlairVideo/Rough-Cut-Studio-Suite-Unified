@@ -20,6 +20,7 @@ members = [
     "interview-transcriber",
     "rcs-utils",
     "rough-cut-studio",
+    "spyglass-core",
     "suite-wrapper",
 ]
 
@@ -3390,6 +3391,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/d6/cc3c80ac9b2289da4cf46c5d53b05e4327e6f5560a25868d06f9e2213af1/soxr-1.1.0-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f4977323ef9c3aa3c2a26ff5fe0191c84b8fd759daf7afb1f25a91a55ad8b730", size = 244617, upload-time = "2026-05-03T00:15:07.134Z" },
     { url = "https://files.pythonhosted.org/packages/d3/9e/f7af5fae841ffe32ed8440234ea2ad6adecca3bd92b6101076268c429000/soxr-1.1.0-cp314-cp314t-win_amd64.whl", hash = "sha256:e17d4ef9b0185214b2c0935605ae63f827ea423bc74964be44763d68d2b6c21e", size = 187253, upload-time = "2026-05-03T00:15:08.813Z" },
 ]
+
+[[package]]
+name = "spyglass-core"
+version = "0.1.0"
+source = { editable = "apps/spyglass/crates/spyglass-py" }
 
 [[package]]
 name = "sqlalchemy"

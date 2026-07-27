@@ -27,6 +27,18 @@ HARMONIZER_DIR = os.path.join(PARENT_DIR, "harmonizer")
 # Renamed from HARMONIZER_PROTOTYPE_DIR ("prototype/") during the Phase 2
 # migration — this is the real alignment/FCPXML engine, not scratch code.
 HARMONIZER_BACKEND_DIR = os.path.join(HARMONIZER_DIR, "backend")
+# Spyglass (content-aware shot search). Unlike every other sibling app
+# here, Spyglass's engine is Rust, not Python — there's no subprocess
+# worker script to point at. What this suite actually consumes is the
+# compiled `spyglass_core` PyO3 extension (apps/spyglass/crates/spyglass-py,
+# built via `maturin develop` into this venv's site-packages — see
+# spyglass_bridge.py) plus the Python ML sidecar Spyglass's own engine
+# shells out to for CLIP/VLM analysis (unrelated to how the engine itself
+# is reached from Python — see spyglass_bridge.py's module docstring).
+# SPYGLASS_APP_DATA_DIR (needs ASSETS_DIR) is defined further down, next
+# to CARDEATER_DB, the closest analog.
+SPYGLASS_DIR = os.path.join(PARENT_DIR, "spyglass")
+SPYGLASS_SIDECAR_DIR = os.path.join(SPYGLASS_DIR, "sidecar")
 
 RCS_BACKEND_DIR = os.path.join(RCS_DIR, "backend")
 RCS_FRONTEND_DIR = os.path.join(RCS_DIR, "frontend")
@@ -68,6 +80,12 @@ LOGOS_DIR = os.path.join(ASSETS_DIR, "logos")
 PROXIES_DIR = os.path.join(ASSETS_DIR, "proxies")
 FAVORITES_FILE = os.path.join(ASSETS_DIR, "favorites.json")
 CARDEATER_DB = os.path.join(ASSETS_DIR, "cardeater.sqlite3")
+# Spyglass's own SQLite index + keyframe cache + backups live under here
+# (spyglass_core::Db::open joins "spyglass_index.sqlite" onto whatever
+# app_data_dir it's given -- same convention as the standalone Tauri app's
+# own OS-provided app-data directory, just relocated under this suite's
+# own assets/ tree).
+SPYGLASS_APP_DATA_DIR = os.path.join(ASSETS_DIR, "spyglass")
 
 # Colorize workspace: JSON sidecars, matching every other workspace's
 # storage convention (no shared SQLite/settings system exists in this
@@ -112,5 +130,5 @@ def ensure_suite_dirs():
     rebuilt at every launch."""
     for d in (GENERATED_DIR, TRANSCRIPTS_DIR, GRAPHICS_DIR, LOGOS_DIR, PROXIES_DIR, IVT_CACHE_DIR,
               WEBVIEW_STORAGE_DIR, COLORIZE_PROJECTS_DIR, COLORIZE_PRESETS_DIR,
-              COLORIZE_LUTS_DIR, COLORIZE_EXPORTS_TMP_DIR):
+              COLORIZE_LUTS_DIR, COLORIZE_EXPORTS_TMP_DIR, SPYGLASS_APP_DATA_DIR):
         os.makedirs(d, exist_ok=True)

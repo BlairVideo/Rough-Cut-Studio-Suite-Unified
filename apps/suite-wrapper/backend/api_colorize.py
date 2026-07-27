@@ -89,6 +89,26 @@ class ColorizeMixin:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
+    def colorize_probe_clips(self, paths):
+        """Same probe as colorize_pick_clips, but for paths the caller
+        already knows (no file dialog) -- the Search workspace's "Send to
+        Colorize" hand-off supplies real paths directly, same contract as
+        colorize_pick_clips's own per-clip {"path", "error"} shape on a
+        probe failure so colorize.js can reuse the same skip-and-toast
+        handling either way."""
+        try:
+            clips = []
+            for path in (paths or []):
+                try:
+                    clips.append(colorize_bridge.probe_clip(path))
+                except Exception as e:
+                    traceback.print_exc()
+                    clips.append({"path": path, "error": str(e)})
+            return {"ok": True, "clips": clips}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
     def colorize_get_preview_url(self, path):
         """A loopback URL colorize.js's <video> element can load for a
         clip's ORIGINAL source file -- the preview always decodes the

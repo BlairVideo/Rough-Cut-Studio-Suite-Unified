@@ -1,0 +1,39 @@
+## Shot boundary detection over decoded frames
+scenedetect[opencv]>=0.6.4
+
+## Keyframe extraction / frame decoding
+opencv-python>=4.8
+numpy>=1.24
+pillow>=9.0
+
+## Local, offline CLIP visual + text embeddings (same library B-Roll
+## Analyzer already uses for its energy scoring -- proven to work in this
+## repo's environment, weights cached locally after first download, no
+## cloud API)
+torch>=2.0
+open_clip_torch>=2.24
+
+## Local, offline VLM captioning/tagging (Section 6 step 5) -- the actual
+## open-source moondream2 checkpoint loaded directly via `transformers`,
+## NOT the `moondream` pip package (that package's client defaults to
+## Moondream's cloud API even in "local" mode). Weights download once from
+## HuggingFace, same category as the CLIP/Whisper weights already used
+## elsewhere in the Suite; all inference after that runs on-device.
+## transformers is pinned -- moondream2's `trust_remote_code` model code
+## isn't compatible with newer transformers major versions.
+transformers==4.44.2
+einops>=0.7
+accelerate>=0.30
+
+## Local, offline OCR -- deterministic backstop for on-screen text (banners,
+## signage, UI chrome on screen-recording footage) leaking into VLM tags
+## that TAGS_PROMPT alone doesn't reliably stop moondream2 from producing.
+## Thin binding over the local `tesseract` binary, same "local tool, not a
+## cloud API" pattern as this suite's use of ffmpeg/ExifTool elsewhere.
+pytesseract>=0.3.10
+
+# Requires the `ffmpeg`/`ffprobe` system binaries (already on PATH via
+# Homebrew) for duration probing, and the `tesseract` system binary
+# (`brew install tesseract`) for pytesseract above -- neither is
+# pip-installable. No network access beyond the one-time CLIP/moondream2
+# weight downloads from their normal open-source hosts.

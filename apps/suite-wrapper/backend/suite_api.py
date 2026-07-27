@@ -38,7 +38,8 @@ try:
     from .api_harmonize import HarmonizeMixin
     from .api_pipeline import PipelineMixin
     from .api_colorize import ColorizeMixin
-    from . import cardeater_copy, notify
+    from .api_spyglass import SpyglassMixin
+    from . import cardeater_copy, notify, spyglass_bridge
 except ImportError:  # pragma: no cover — direct script import in tests
     import paths
     import handoff
@@ -60,8 +61,10 @@ except ImportError:  # pragma: no cover — direct script import in tests
     from api_harmonize import HarmonizeMixin
     from api_pipeline import PipelineMixin
     from api_colorize import ColorizeMixin
+    from api_spyglass import SpyglassMixin
     import cardeater_copy
     import notify
+    import spyglass_bridge
 
 # api_shared already put RCS's backend dir on sys.path; keep the guard for
 # direct-import edge cases.
@@ -75,12 +78,12 @@ from api import Api       # noqa: E402  (Rough Cut Studio's Api)
 
 class SuiteApi(SecurityMixin, TranscriberMixin, BrollMixin, FavoritesMixin,
                SyncMixin, BranderMixin, CardEaterMixin, HarmonizeMixin,
-               PipelineMixin, ColorizeMixin, Api):
+               PipelineMixin, ColorizeMixin, SpyglassMixin, Api):
     """Composed js_api (contract A-1): each workspace's methods live in
     its own mixin module (api_security / api_transcriber / api_broll /
     api_favorites / api_sync / api_brander / api_cardeater /
-    api_harmonize / api_pipeline / api_colorize). RCS's Api is
-    LAST in the MRO, so every mixin override of an inherited method
+    api_harmonize / api_pipeline / api_colorize / api_spyglass). RCS's Api
+    is LAST in the MRO, so every mixin override of an inherited method
     (SecurityMixin's key/autosave/transcript-path overrides, this class's
     save_xml) wins, and their super() calls fall through to RCS unchanged.
     What stays in this file: __init__, the Jobs surface (incl. the shared
@@ -92,6 +95,16 @@ class SuiteApi(SecurityMixin, TranscriberMixin, BrollMixin, FavoritesMixin,
         paths.ensure_suite_dirs()
         self.jobs = get_job_manager()
         self.favorites = favorites.load()
+        # Spyglass: unlike every other mixin here, this starts a real
+        # engine (background gap-fill/rescan/volume-watch loops on its own
+        # Tokio runtime, linked in-process via the compiled spyglass_core
+        # extension) rather than just initializing plain Python state --
+        # mirrors CardEaterState's eager start_watcher() below and
+        # Spyglass's own standalone Tauri `setup()`, both of which start
+        # their background loops unconditionally at launch. Best-effort:
+        # a not-yet-built extension logs a traceback and leaves the Search
+        # tab non-functional rather than failing suite startup entirely.
+        spyglass_bridge.try_eager_init()
         # SEC-3: RCS's crash-recovery autosave (inherited _autosave_path)
         # otherwise lands at a fixed, world-predictable name in the shared
         # temp dir and contains verbatim transcript text (PII). Relocate it

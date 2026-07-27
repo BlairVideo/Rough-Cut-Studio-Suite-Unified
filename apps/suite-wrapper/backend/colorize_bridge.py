@@ -294,6 +294,21 @@ def delete_preset(preset_id):
 # export
 # ---------------------------------------------------------------------------
 
+def _probe_video_height(path):
+    """Narrow, fail-open probe for just the video stream's height -- drives
+    share_h264's resolution-aware bitrate tier (see ffmpeg_graph.py's
+    _h264_bitrate_for_height). Deliberately its own targeted ffprobe call
+    rather than reusing probe_clip()'s fuller probe: probe_clip also probes
+    fps via a separate ffprobe invocation that export has no use for."""
+    try:
+        info = ffprobe_util.probe_json(
+            path, timeout=15, select_streams="v:0", show_entries="stream=height")
+        streams = (info or {}).get("streams") or []
+        return streams[0].get("height") if streams else None
+    except Exception:
+        return None
+
+
 def export_clip(clip: ColorizeClip, output_path, output_preset, progress_cb, cancel_event):
     """Runs one clip's graded/trimmed export. Always reads clip.source_path
     directly (never a preview proxy) — matches braw_bridge's "export
@@ -319,6 +334,7 @@ def export_clip(clip: ColorizeClip, output_path, output_preset, progress_cb, can
         out_seconds=out_seconds,
         creative_lut=creative_lut,
         preset=output_preset,
+        source_height=_probe_video_height(clip.source_path),
     )
     return run_export(spec, total_duration_seconds=duration, progress_cb=progress_cb,
                        cancel_event=cancel_event)

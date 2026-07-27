@@ -82,6 +82,10 @@
   font-size: 10px;
   color: var(--text-faint);
 }
+/* --text-faint on the base row background reads fine, but is-active swaps
+   in --amber-dim -- two similarly dark tones with too little contrast
+   between them, making the timecode nearly invisible on the active row. */
+.cz-media-item.is-active .cz-media-item__meta { color: var(--text-primary); }
 
 .cz-media-item__lut-badge {
   flex: none;
@@ -91,6 +95,18 @@
   background: var(--teal-dim);
   color: var(--teal);
 }
+
+.cz-media-item__remove {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.cz-media-item__remove:hover { color: var(--danger); }
 
 /* ---------------- center: preview + transport ---------------- */
 
@@ -391,6 +407,28 @@
   gap: 12px;
 }
 
+/* Wheels & HSL is likewise a combined tab: the 3-way wheels take the
+   flexible main width, HSL bands + sliders sit in a fixed-width column
+   on the right, same split pattern as Basic & Curves above. */
+.cz-tab-panel--color {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 24px;
+}
+.cz-color-wheels {
+  flex: 0 0 50%;
+  max-width: 50%;
+  min-width: 0;
+}
+.cz-color-hsl {
+  flex: 0 0 50%;
+  max-width: 50%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .cz-preset-name-input {
   flex: 1;
   background: var(--bg-input);
@@ -470,8 +508,8 @@
 .cz-wheel-block__reset:hover { color: var(--amber); }
 .cz-wheel {
   position: relative;
-  width: 160px;
-  height: 160px;
+  width: 208px;
+  height: 208px;
   border-radius: 50%;
   cursor: crosshair;
   touch-action: none;
@@ -491,7 +529,7 @@
   pointer-events: none;
 }
 .cz-wheel-block input[type="range"] {
-  width: 160px;
+  width: 208px;
   accent-color: var(--teal);
 }
 
@@ -606,9 +644,10 @@
   .cz-slider-row { gap: 3px; }
   .cz-basic-curves { gap: 6px; }
   #czCurveCanvas { height: 100px; }
+  .cz-color-hsl { gap: 6px; }
   .cz-wheels { gap: 6px; }
-  .cz-wheel { width: 110px; height: 110px; }
-  .cz-wheel-block input[type="range"] { width: 110px; }
+  .cz-wheel { width: 143px; height: 143px; }
+  .cz-wheel-block input[type="range"] { width: 143px; }
 }
 
 @container cz-controls (max-height: 210px) {
@@ -621,8 +660,8 @@
   .cz-basic-curves .suite-hint { display: none; }
   #czCurveCanvas { height: 70px; }
   .cz-curve-channels button { padding: 2px; }
-  .cz-wheel { width: 84px; height: 84px; }
-  .cz-wheel-block input[type="range"] { width: 84px; }
+  .cz-wheel { width: 109px; height: 109px; }
+  .cz-wheel-block input[type="range"] { width: 109px; }
 }
 
 @container cz-controls (max-height: 160px) {
@@ -637,7 +676,8 @@
   .cz-slider-row input[type="range"] { height: 8px; margin: 0; }
   .cz-basic-curves { gap: 4px; }
   #czCurveCanvas { height: 40px; }
+  .cz-color-hsl { gap: 4px; }
   .cz-curve-channels button { padding: 1px; font-size: 9px; }
-  .cz-wheel { width: 64px; height: 64px; }
-  .cz-wheel-block input[type="range"] { width: 64px; }
+  .cz-wheel { width: 83px; height: 83px; }
+  .cz-wheel-block input[type="range"] { width: 83px; }
 }

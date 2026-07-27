@@ -1,0 +1,36 @@
+[package]
+name = "spyglass-py"
+version = "0.1.0"
+edition.workspace = true
+description = "PyO3 bindings exposing spyglass-engine to Python. Phase 1: a deliberately minimal spike proving the Tokio-runtime-inside-a-Python-process pattern before binding the full command surface (Phase 2+)."
+
+[lib]
+name = "spyglass_core"
+crate-type = ["cdylib", "rlib"]
+# This crate's own `[lib] name` is deliberately identical to its
+# `spyglass-core` dependency (Python needs to `import spyglass_core`,
+# matching the `#[pymodule] fn spyglass_core` convention) -- which makes
+# rustdoc's doctest harness unable to disambiguate the two same-named
+# rlibs when linking. There are no real doctests here anyway (a PyO3
+# extension module's public surface is `#[pyfunction]`s meant to be called
+# from Python, not doc-tested as ordinary Rust API), so disable the pass
+# outright rather than working around the ambiguity.
+doctest = false
+
+[dependencies]
+spyglass-core = { path = "../spyglass-core" }
+spyglass-engine = { path = "../spyglass-engine" }
+pyo3 = { version = "0.22", features = ["extension-module"] }
+pythonize = "0.22"
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1.52.4", features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSResponder", "NSView", "NSWindow", "NSBitmapImageRep", "NSImageRep", "NSGraphics", "NSGraphicsContext"] }
+objc2-av-foundation = { version = "0.3.2", features = ["objc2-core-media"] }
+objc2-av-kit = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-media = { version = "0.3.2", default-features = false, features = ["CMTime", "CMTimeRange"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSString", "NSURL", "NSValue"] }

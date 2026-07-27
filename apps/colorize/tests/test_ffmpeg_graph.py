@@ -13,7 +13,8 @@ from grade import GradeState
 from lut import CubeLut, identity_lut
 import ffmpeg_graph as fg
 from ffmpeg_graph import (ExportSpec, bake_grade_lut, build_export_command,
-                           parse_progress_line, prepare_export, run_export)
+                           parse_progress_line, prepare_export, run_export,
+                           _h264_bitrate_for_height)
 
 
 def test_bake_grade_lut_identity_grade_is_near_identity():
@@ -73,6 +74,41 @@ def test_build_export_command_unknown_preset_raises():
         source_path="/a", output_path="/b", grade=GradeState(), preset="not_a_real_preset")
     with pytest.raises(ValueError):
         build_export_command(spec, "/tmp/baked.cube")
+
+
+@pytest.mark.parametrize("height,expected", [
+    (None, "12M"),  # unknown height falls back to the 1080p tier
+    (480, "6M"),
+    (720, "6M"),
+    (1080, "12M"),
+    (1440, "20M"),
+    (2160, "40M"),
+    (4320, "64M"),
+])
+def test_h264_bitrate_for_height_tiers(height, expected):
+    assert _h264_bitrate_for_height(height) == expected
+
+
+def test_build_export_command_share_h264_uses_resolution_aware_bitrate():
+    spec_4k = ExportSpec(
+        source_path="/a", output_path="/b", grade=GradeState(),
+        preset="share_h264", source_height=2160)
+    cmd_4k = build_export_command(spec_4k, "/tmp/baked.cube")
+    bv_index = cmd_4k.index("-b:v")
+    assert cmd_4k[bv_index + 1] == "40M"
+
+    spec_unknown = ExportSpec(
+        source_path="/a", output_path="/b", grade=GradeState(), preset="share_h264")
+    cmd_unknown = build_export_command(spec_unknown, "/tmp/baked.cube")
+    assert cmd_unknown[cmd_unknown.index("-b:v") + 1] == "12M"
+
+
+def test_build_export_command_archive_prores_ignores_source_height():
+    spec = ExportSpec(
+        source_path="/a", output_path="/b", grade=GradeState(),
+        preset="archive_prores422", source_height=2160)
+    cmd = build_export_command(spec, "/tmp/baked.cube")
+    assert "-b:v" not in cmd
 
 
 def test_prepare_export_writes_temp_lut_and_cleans_up_is_caller_responsibility(tmp_path):

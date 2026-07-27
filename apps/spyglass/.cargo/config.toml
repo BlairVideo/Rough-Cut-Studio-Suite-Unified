@@ -1,0 +1,14 @@
+# PyO3's `extension-module` feature (used by `crates/spyglass-py`)
+# deliberately does not link against libpython -- Python supplies those
+# symbols at load time when it dlopen()s the compiled extension, not at
+# build time. `maturin` knows to pass `-undefined dynamic_lookup` on macOS
+# automatically; a plain `cargo build`/`cargo check` does not, and fails
+# with "symbol(s) not found for architecture arm64" (`_Py_IsInitialized`
+# and friends) without this. This is PyO3's own documented fix for exactly
+# that failure, applied workspace-wide since it's harmless for every other
+# (non-Python-linked) crate here.
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-undefined dynamic_lookup"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-undefined dynamic_lookup"]

@@ -515,6 +515,17 @@ void main() {
     const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: true });
     if (!gl) return null;
 
+    // Every RGB upload below (curve LUT, creative 3D LUT) is a tightly-packed
+    // buffer with no row padding. The default UNPACK_ALIGNMENT of 4 makes the
+    // GL assume each row is padded to a 4-byte boundary -- true for the 256x1
+    // curve LUT (256*3=768) but false for most real creative LUT sizes
+    // (17/33/65 -> size*3 isn't a multiple of 4), which made texImage3D throw
+    // INVALID_OPERATION and left the LUT texture incomplete. Sampling an
+    // incomplete texture returns solid black, which at the default 100%
+    // lut_intensity blends the whole preview to black. Alignment 1 matches
+    // our buffers exactly regardless of size.
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
     const vs = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SRC);
     const fs = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SRC);
     const program = gl.createProgram();
@@ -899,7 +910,7 @@ void main() {
       else if (e.key === " ") { e.preventDefault(); $("czPlayBtn").click(); }
     });
 
-    window.addEventListener("resize", resizeCanvasToVideo);
+    window.addEventListener("resize", () => { resizeCanvasToVideo(); resizeCurveCanvas(); });
 
     $("czShowBeforeChk").addEventListener("change", (e) => {
       CZ.showBefore = e.target.checked;
@@ -953,11 +964,12 @@ void main() {
         <span class="cz-media-item__name" title="${esc(clip.source_path)}">${esc(basename(clip.source_path))}</span>
         ${lutBadge}
         <span class="cz-media-item__meta">${esc(meta)}</span>
+        <button class="cz-media-item__remove" data-id="${esc(clip.id)}" title="Remove clip">✕</button>
       </li>`;
     }).join("");
     list.querySelectorAll(".cz-media-item").forEach((li) => {
       li.addEventListener("click", (e) => {
-        if (e.target.classList.contains("cz-media-item__check")) return;
+        if (e.target.classList.contains("cz-media-item__check") || e.target.classList.contains("cz-media-item__remove")) return;
         loadClipIntoPreview(parseInt(li.dataset.index, 10));
       });
     });
@@ -968,12 +980,66 @@ void main() {
         renderMediaBin();
       });
     });
+    list.querySelectorAll(".cz-media-item__remove").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeClip(btn.dataset.id);
+      });
+    });
+  }
+
+  // Clears WebGL/panel state back to "nothing loaded" -- shared by
+  // removeClip (when the active clip was the one removed) and
+  // clearAllClips, both of which can leave the bin empty.
+  function resetPreviewToEmpty() {
+    CZ.activeClipIndex = -1;
+    const video = $("czVideo");
+    if (video) video.removeAttribute("src");
+    buildCurveLUT();
+    applyLutTexture(null);
+    renderBasicPanel(); renderWheelsPanel(); renderCurvesPanel(); renderHslPanel(); renderLutPanel();
+    updateHistoryButtons();
+    requestRender();
+  }
+
+  function removeClip(id) {
+    const idx = CZ.project.clips.findIndex((c) => c.id === id);
+    if (idx < 0) return;
+    CZ.project.clips.splice(idx, 1);
+    CZ.selected.delete(id);
+    GRADE_HISTORY.delete(id);
+    CZ.project.clips.forEach((c, i) => { c.order = i; });
+    if (CZ.activeClipIndex === idx) {
+      const nextIndex = CZ.project.clips.length ? Math.min(idx, CZ.project.clips.length - 1) : -1;
+      if (nextIndex >= 0) loadClipIntoPreview(nextIndex); else resetPreviewToEmpty();
+    } else if (CZ.activeClipIndex > idx) {
+      CZ.activeClipIndex -= 1;
+    }
+    renderMediaBin();
+  }
+
+  function clearAllClips() {
+    if (!CZ.project.clips.length) return;
+    if (!confirm(`Remove all ${CZ.project.clips.length} clip(s) from this project?`)) return;
+    CZ.project.clips.forEach((c) => GRADE_HISTORY.delete(c.id));
+    CZ.project.clips = [];
+    CZ.selected.clear();
+    resetPreviewToEmpty();
+    renderMediaBin();
   }
 
   async function pickClips() {
     const res = await call("colorize_pick_clips");
     if (!res.ok) { toastIfError(res, "Couldn't import clips."); return; }
-    (res.clips || []).forEach((probe) => {
+    addProbedClips(res.clips);
+  }
+
+  // Shared by pickClips (dialog-sourced paths) and addClipsByPath
+  // (paths supplied by another workspace's hand-off, e.g. Spyglass's
+  // "Send to Colorize") -- both just need each probe result pushed into
+  // the bin the same way.
+  function addProbedClips(probedClips) {
+    (probedClips || []).forEach((probe) => {
       if (probe.error) { toast(`${basename(probe.path)}: ${probe.error}`, "error"); return; }
       const clip = newClip(probe.path, probe);
       clip.order = CZ.project.clips.length;
@@ -983,6 +1049,17 @@ void main() {
     if (CZ.activeClipIndex < 0 && CZ.project.clips.length) loadClipIntoPreview(0);
   }
 
+  // Cross-workspace hand-off (Search workspace's "Send to Colorize"): the
+  // caller already knows the file paths, so this skips the file dialog
+  // colorize_pick_clips would otherwise open.
+  async function addClipsByPath(paths) {
+    if (!paths || !paths.length) return;
+    const res = await call("colorize_probe_clips", paths);
+    if (!res.ok) { toastIfError(res, "Couldn't import clips."); return; }
+    addProbedClips(res.clips);
+    toast(`Sent ${paths.length} clip${paths.length === 1 ? "" : "s"} to Colorize.`, "ok");
+  }
+
   // ==========================================================================
   // control tabs
   // ==========================================================================
@@ -990,10 +1067,14 @@ void main() {
   function setActiveTab(tab) {
     CZ.activeTab = tab;
     document.querySelectorAll(".cz-tab").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === tab));
-    ["basic", "wheels", "hsl", "lut"].forEach((t) => {
+    ["basic", "color", "lut"].forEach((t) => {
       const panel = $("czPanel" + t[0].toUpperCase() + t.slice(1));
       if (panel) panel.hidden = t !== tab;
     });
+    // The curve canvas can't be measured (clientWidth/Height are 0) while
+    // its tab is hidden -- re-measure and redraw at the correct backing
+    // -store resolution now that it's visible again.
+    if (tab === "basic") resizeCurveCanvas();
   }
 
   // ---- basic ----
@@ -1158,6 +1239,27 @@ void main() {
       buildCurveLUT(); requestRender(); drawCurveEditor();
     });
     wireCurveEditor();
+    resizeCurveCanvas();
+  }
+
+  // The canvas's `width`/`height` attributes (its backing-store pixel
+  // buffer) are hardcoded to 320x170 in the markup above, but CSS
+  // stretches it to fill whatever width .cz-basic-curves is actually
+  // given (often well over 320 CSS px) -- that upscale of a low-res
+  // bitmap is what reads as a blurry/low-res curve chart. Re-measure the
+  // canvas's on-screen CSS size and size the backing store to match, at
+  // devicePixelRatio, so it's always drawn crisp at its real display
+  // size. clientWidth/clientHeight are 0 while the Basic & Curves tab is
+  // hidden (display:none), so this is a no-op until setActiveTab makes
+  // it visible again and calls this itself.
+  function resizeCurveCanvas() {
+    const canvas = $("czCurveCanvas");
+    if (!canvas || !canvas.clientWidth || !canvas.clientHeight) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(canvas.clientWidth * dpr);
+    const h = Math.round(canvas.clientHeight * dpr);
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
     drawCurveEditor();
   }
 
@@ -1170,7 +1272,18 @@ void main() {
     const canvas = $("czCurveCanvas");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
+    // Draw in CSS-pixel space (canvas.clientWidth/Height), not raw backing
+    // -store pixels -- resizeCurveCanvas sizes the backing store to
+    // clientWidth/Height * devicePixelRatio for crispness, but drawing
+    // directly in that larger pixel space would also shrink lineWidth/
+    // point-radius relative to the visible canvas at high DPR. Resetting
+    // the transform to the current DPR scale (rather than accumulating
+    // ctx.scale calls across repeated draws) keeps this idempotent no
+    // matter how many times drawCurveEditor runs.
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = canvas.clientWidth || canvas.width / dpr;
+    const H = canvas.clientHeight || canvas.height / dpr;
     ctx.clearRect(0, 0, W, H);
     ctx.strokeStyle = "rgba(255,255,255,.08)";
     for (let i = 1; i < 4; i++) {
@@ -1574,11 +1687,25 @@ void main() {
     wireExportButtons();
     wireHistoryControls();
     $("czPickClipsBtn").addEventListener("click", pickClips);
+    $("czClearClipsBtn").addEventListener("click", clearAllClips);
     refreshLuts();
     refreshProjectList();
     refreshPresets();
     startExportPolling();
   }
+
+  // Cross-workspace hand-off event -- same loose-coupling contract as
+  // "suite:workspace-changed" (see file header). The sender is expected
+  // to switchWs("colorize") first, which fires that event synchronously
+  // and calls init(); the defensive init() call here just covers a
+  // caller that dispatches this before this workspace has ever been
+  // shown (init() itself is idempotent, guarded by `initialized`).
+  document.addEventListener("suite:send-to-colorize", (e) => {
+    const paths = (e.detail && e.detail.paths) || [];
+    if (!paths.length) return;
+    init();
+    addClipsByPath(paths);
+  });
 
   document.addEventListener("suite:workspace-changed", (e) => {
     const active = e.detail && e.detail.ws === "colorize";

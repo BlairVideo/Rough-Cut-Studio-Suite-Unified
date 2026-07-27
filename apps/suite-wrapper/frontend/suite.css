@@ -153,6 +153,89 @@
   grid-template-columns: 300px minmax(240px, 1fr) 6px var(--ce-viewer-w, 390px);
 }
 
+/* Search (Spyglass): query/filters rail, results, and a dedicated
+   pool + consolidate/export rail — three columns so the export controls
+   don't push results down into a sliver at the bottom of one long
+   stacked sidebar. */
+.suite-ws--spyglass {
+  display: grid;
+  grid-template-columns: 300px minmax(360px, 1fr) 6px var(--sg-pool-w, 300px);
+}
+.suite-ws--spyglass[hidden] { display: none; }
+
+/* Search results: the keyframe thumbnail itself is the click-to-preview
+   trigger (the separate "Preview" button was removed) — a hover/focus
+   play-icon overlay signals it's clickable. */
+.sg-preview-trigger { cursor: pointer; }
+.sg-preview-trigger::after {
+  content: "▶";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0);
+  opacity: 0;
+  transition: opacity .12s ease, background .12s ease;
+  pointer-events: none;
+}
+.sg-preview-trigger:hover::after,
+.sg-preview-trigger:focus-visible::after {
+  opacity: 1;
+  background: rgba(0, 0, 0, .35);
+}
+.sg-preview-trigger:focus-visible {
+  outline: 1px solid var(--amber);
+  outline-offset: -2px;
+}
+
+.suite-controls--sg-pool {
+  border-right: none;
+  border-left: 1px solid var(--hairline);
+}
+
+/* Pool & Export panel: user-adjustable width, dragged via #sgPoolResize
+   (the grid column between results and the pool aside — see
+   .suite-ws--spyglass's `var(--sg-pool-w, 300px)` track). Same
+   drag-a-6px-handle pattern as CardEater's viewer panel resize. */
+.suite-sg-pool-resize {
+  position: relative;
+  cursor: col-resize;
+  background: var(--hairline);
+}
+.suite-sg-pool-resize::before {
+  /* widen the hit area well past the visible 6px track without widening
+     the grid column itself */
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+.suite-sg-pool-resize:hover,
+.suite-sg-pool-resize.is-dragging {
+  background: var(--amber);
+}
+body.suite-sg-pool-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Lets a single block (Spyglass's tag facets, or its pool list) claim
+   the aside's leftover vertical space instead of every block just
+   stacking at its natural height with dead space below. */
+.suite-block--grow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.suite-list--grow {
+  flex: 1;
+  max-height: none;
+}
+
 .suite-controls {
   background: var(--bg-panel);
   border-right: 1px solid var(--hairline);
@@ -200,6 +283,25 @@
   padding-bottom: 6px;
   border-bottom: 1px solid var(--hairline);
 }
+
+/* A `.suite-block-title` that's also a collapse toggle (e.g. Spyglass's
+   "Filter by tag") -- same look as a plain title, but a real <button> so
+   it's keyboard-accessible, with a chevron flush to the right. */
+.suite-collapsible-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  /* Deliberately no `font` reset -- `.suite-block-title`'s own
+     font-family/size/weight rules already apply to this element (both
+     classes are combined on the same node) and must not be clobbered by
+     a button's UA-stylesheet font default. */
+}
+.suite-collapsible-toggle:hover { color: var(--amber); }
 
 .suite-hint {
   margin: 0;
@@ -267,6 +369,10 @@
 /* Must out-rank `.suite-field input[type="number"]`'s width:100% above,
    or inline number fields stretch and overflow the control rail. */
 .suite-field.suite-field--inline input { width: 84px; flex: none; text-align: center; font-family: var(--font-mono); }
+/* Same out-ranking need as the input rule above, but for a <select> (e.g.
+   the results-header "Sort by" control) -- without this it inherits
+   `.suite-field select`'s width:100% and stretches to fill the row. */
+.suite-field.suite-field--inline select { width: auto; flex: none; }
 
 .suite-field input[type="color"] {
   padding: 2px;
@@ -306,6 +412,113 @@
   cursor: pointer;
 }
 .suite-check input { margin-top: 2px; accent-color: var(--amber); }
+
+/* Generic scrollable row list (Spyglass's tag facets / watched roots /
+   pool tray) -- a lighter-weight sibling of .suite-broll-grid's card
+   layout for content that's better read as rows than thumbnail tiles. */
+.suite-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.suite-list--tags { flex-direction: row; flex-wrap: wrap; max-height: none; }
+.suite-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.suite-list-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suite-list-row__meta { color: var(--text-faint); font-size: 11px; white-space: nowrap; }
+.suite-list-row button {
+  flex: none;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 7px;
+}
+.suite-list-row button:hover { color: var(--amber); border-color: var(--amber); }
+.suite-list-row button.suite-list-row__danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Folder tree (Search workspace left panel) -- one level of children is
+   fetched lazily per expand (see suite.js's loadSpyglassFolderChildren),
+   not the whole subtree up front. */
+.suite-folder-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.suite-folder-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: calc(var(--sg-tree-depth, 0) * 14px);
+}
+.sg-folder-toggle {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+  text-align: center;
+}
+.sg-folder-toggle--leaf { cursor: default; }
+.sg-folder-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  min-width: 0;
+  padding: 4px 6px;
+  text-align: left;
+}
+.sg-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-folder-select:hover { background: var(--bg-input); }
+.suite-folder-tree-row.is-selected .sg-folder-select { color: var(--amber); background: var(--bg-input); }
+
+.suite-sg-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
+.suite-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.suite-tag-chip.is-active { border-color: var(--amber); color: var(--amber); }
 
 /* buttons */
 
@@ -464,6 +677,8 @@
 .suite-folder-row { display: flex; gap: 6px; }
 .suite-folder-row input { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
 .suite-folder-row .suite-btn { flex: none; padding: 7px 12px; }
+.suite-folder-row--wrap { flex-wrap: wrap; }
+.suite-folder-row--wrap .suite-btn { flex: 1 1 auto; }
 
 /* ---------------- right-hand results columns ---------------- */
 

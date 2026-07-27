@@ -1,0 +1,17 @@
+[package]
+name = "spyglass-engine"
+version = "0.1.0"
+edition.workspace = true
+description = "Spyglass engine: background workers, sidecar process management, and app state -- shared between the Tauri shell and any future non-Tauri host (e.g. a PyO3-linked process)"
+
+[lib]
+name = "spyglass_engine"
+crate-type = ["rlib"]
+
+[dependencies]
+spyglass-core = { path = "../spyglass-core" }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4.45"
+tokio = { version = "1.52.4", features = ["rt-multi-thread", "fs", "sync", "time", "macros", "process"] }

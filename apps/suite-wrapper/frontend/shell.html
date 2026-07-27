@@ -17,6 +17,7 @@
     </div>
     <nav class="suite-ws-tabs" role="tablist" aria-label="Workspaces">
       <button class="suite-ws-tab" data-ws="cardeater" role="tab" aria-selected="false">Copy</button>
+      <button class="suite-ws-tab" data-ws="spyglass" role="tab" aria-selected="false">Search</button>
       <button class="suite-ws-tab" data-ws="sync" role="tab" aria-selected="false">Sync</button>
       <button class="suite-ws-tab" data-ws="transcribe" role="tab" aria-selected="false">Transcribe</button>
       <button class="suite-ws-tab" data-ws="broll" role="tab" aria-selected="false">B-Roll</button>
@@ -398,6 +399,141 @@
     </div>
   </section>
 
+  <!-- ================= Search workspace (Spyglass integration) ================= -->
+  <section id="workspace-spyglass" class="suite-ws suite-ws--spyglass" hidden>
+    <aside class="suite-controls">
+      <h2 class="suite-panel-title">Spyglass Search</h2>
+      <p class="suite-hint">Search the whole archive by what's happening in the shot — "mascot cheering at a football game" — and jump straight to the matching clips, cued to timecode.</p>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Query</h3>
+        <div class="suite-folder-row">
+          <input type="text" id="sgQuery" placeholder="students studying in the library" aria-label="Search query" />
+          <button class="suite-btn suite-btn--primary" id="sgSearch">Search</button>
+        </div>
+        <button class="suite-btn suite-btn--ghost" id="sgBrowseAll">Browse whole archive</button>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Folders</h3>
+        <p class="suite-hint suite-hint--tight">Scope to a watched folder, or a subfolder within it.</p>
+        <div class="suite-folder-tree" id="sgFolderTree">
+          <p class="suite-hint suite-hint--tight">No watched folders yet — add one in Settings → Search.</p>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Filters</h3>
+        <div class="suite-folder-row">
+          <label class="suite-hint suite-hint--tight">From <input type="date" id="sgDateFrom" aria-label="Ingested from date" /></label>
+          <label class="suite-hint suite-hint--tight">To <input type="date" id="sgDateTo" aria-label="Ingested to date" /></label>
+        </div>
+        <label class="suite-check"><input type="checkbox" id="sgFavoritesOnly" /> <span>Favorites only</span></label>
+      </div>
+
+      <div class="suite-block suite-block--grow">
+        <button type="button" class="suite-block-title suite-collapsible-toggle" id="sgTagFilterToggle" aria-expanded="true" aria-controls="sgTagFacets">
+          <span>Filter by tag</span>
+          <span id="sgTagFilterChevron" aria-hidden="true">▾</span>
+        </button>
+        <div class="suite-list suite-list--tags" id="sgTagFacets">
+          <p class="suite-hint suite-hint--tight">Run a search or Browse once to populate tags.</p>
+        </div>
+      </div>
+    </aside>
+    <div class="suite-results">
+      <div class="suite-results-head">
+        <h3 class="suite-block-title" id="sgResultsTitle">Results</h3>
+        <label class="suite-field suite-field--inline" style="margin:0;">
+          <span>Sort by</span>
+          <select id="sgSortBy" aria-label="Sort results">
+            <option value="relevance">Relevance</option>
+            <option value="newest_first">Newest first</option>
+            <option value="oldest_first">Oldest first</option>
+            <option value="highest_quality">Highest quality</option>
+            <option value="most_energy">Most energy</option>
+          </select>
+        </label>
+      </div>
+      <div class="suite-results-scroll">
+        <div class="suite-broll-grid" id="sgGrid">
+          <p class="suite-empty">No search yet — type a query and press Search, or Browse whole archive.</p>
+        </div>
+        <div class="suite-sg-load-more" id="sgLoadMoreRow" hidden>
+          <button type="button" class="suite-btn suite-btn--ghost" id="sgLoadMore">View more results</button>
+        </div>
+      </div>
+    </div>
+    <div class="suite-sg-pool-resize" id="sgPoolResize" role="separator" aria-orientation="vertical" aria-label="Resize pool &amp; export panel" tabindex="0"></div>
+    <aside class="suite-controls suite-controls--sg-pool">
+      <h2 class="suite-panel-title">Pool &amp; Export</h2>
+
+      <div class="suite-block suite-block--grow">
+        <h3 class="suite-block-title">Pool (<span id="sgPoolCount">0</span>)</h3>
+        <div class="suite-folder-row">
+          <button class="suite-btn suite-btn--secondary" id="sgPoolExportXml">Export Premiere XML…</button>
+          <button class="suite-btn suite-btn--ghost" id="sgPoolClear">Clear</button>
+        </div>
+        <div class="suite-list suite-list--grow" id="sgPoolList">
+          <p class="suite-hint suite-hint--tight">Nothing pooled yet — click "+ Pool" on a result.</p>
+        </div>
+      </div>
+
+      <div class="suite-block">
+        <h3 class="suite-block-title">Send Pool</h3>
+        <div class="suite-folder-row suite-folder-row--wrap">
+          <button class="suite-btn suite-btn--secondary" id="sgSendBroll">Send to B-Roll Analyzer</button>
+          <button class="suite-btn suite-btn--secondary" id="sgSendEditBroll">Send to Rough Cut Studio</button>
+          <button class="suite-btn suite-btn--secondary" id="sgSendColorize">Send to Colorize</button>
+        </div>
+      </div>
+
+      <div class="suite-block suite-aside-bottom">
+        <h3 class="suite-block-title">Consolidate &amp; Copy Export</h3>
+        <label class="suite-field">
+          <span>Copy mode</span>
+          <select id="sgCopyMode">
+            <option value="full_source">Full source files</option>
+            <option value="trimmed">Trimmed (+ handle)</option>
+          </select>
+        </label>
+        <label class="suite-field">
+          <span>Folder structure</span>
+          <select id="sgFolderStructure">
+            <option value="flat">Flat</option>
+            <option value="subfolder_per_tag">Subfolder per tag</option>
+          </select>
+        </label>
+        <div class="suite-folder-row">
+          <input type="text" id="sgConsolidateDest" readonly placeholder="No destination chosen" aria-label="Consolidate export destination" />
+          <button class="suite-btn suite-btn--ghost" id="sgPickConsolidateDest">Browse…</button>
+        </div>
+        <div class="suite-hint suite-hint--tight" id="sgConsolidateEstimate"></div>
+        <button class="suite-btn suite-btn--secondary" id="sgConsolidateStart" disabled>Start Export</button>
+        <div class="suite-hint suite-hint--tight" id="sgConsolidateProgress"></div>
+        <button class="suite-btn suite-btn--ghost" id="sgExportCopiedXml" disabled>Export Premiere XML of copied files…</button>
+      </div>
+    </aside>
+
+    <!-- Native AVPlayerView preview: the Rust side positions the real
+         player directly over #sgPreviewStage below (never a web <video>
+         -- WebKit can't decode this archive's 10-bit 4:2:2 footage). -->
+    <div class="suite-ce-modal-overlay" id="sgPreviewModal" hidden>
+      <div class="suite-ce-modal suite-ce-modal--wide" role="dialog" aria-modal="true" aria-label="Shot preview">
+        <div class="suite-ce-modal__head">
+          <span class="suite-hint suite-hint--tight" id="sgPreviewPath"></span>
+          <div class="suite-ce-modal__head-actions">
+            <button class="suite-btn suite-btn--ghost" id="sgPreviewReveal">Reveal in Finder</button>
+            <button class="suite-ce-modal__close" id="sgPreviewClose" aria-label="Close preview">✕</button>
+          </div>
+        </div>
+        <div class="suite-ce-modal__body suite-ce-modal__body--center">
+          <div id="sgPreviewStage" style="width:100%;aspect-ratio:16/9;background:#000;"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= Harmonize workspace ================= -->
   <section id="workspace-harmonize" class="suite-ws" hidden>
     <aside class="suite-controls">
@@ -682,7 +818,10 @@
 
       <div class="suite-block" style="min-height:0; flex:1; display:flex; flex-direction:column;">
         <h3 class="suite-block-title">Media</h3>
-        <button class="suite-btn suite-btn--secondary suite-btn--small" id="czPickClipsBtn">Import Clips…</button>
+        <div style="display:flex; gap:6px;">
+          <button class="suite-btn suite-btn--secondary suite-btn--small" id="czPickClipsBtn" style="flex:1;">Import Clips…</button>
+          <button class="suite-btn suite-btn--ghost suite-btn--small" id="czClearClipsBtn" title="Remove all clips">Clear All</button>
+        </div>
         <ul class="cz-media-list" id="czMediaList"></ul>
       </div>
 
@@ -754,8 +893,7 @@
         <h2 class="suite-panel-title">Controls</h2>
         <nav class="cz-tabs" id="czControlTabs">
           <button class="cz-tab is-active" data-tab="basic" type="button">Basic &amp; Curves</button>
-          <button class="cz-tab" data-tab="wheels" type="button">Wheels</button>
-          <button class="cz-tab" data-tab="hsl" type="button">HSL</button>
+          <button class="cz-tab" data-tab="color" type="button">Wheels &amp; HSL</button>
           <button class="cz-tab" data-tab="lut" type="button">LUT</button>
         </nav>
         <div class="cz-controls-head__actions">
@@ -772,8 +910,10 @@
           <div id="czBasicSliders" class="cz-basic-sliders"></div>
           <div id="czPanelCurves" class="cz-basic-curves"></div>
         </div>
-        <div class="cz-tab-panel" data-panel="wheels" id="czPanelWheels" hidden></div>
-        <div class="cz-tab-panel" data-panel="hsl" id="czPanelHsl" hidden></div>
+        <div class="cz-tab-panel cz-tab-panel--color" data-panel="color" id="czPanelColor" hidden>
+          <div id="czPanelWheels" class="cz-color-wheels"></div>
+          <div id="czPanelHsl" class="cz-color-hsl"></div>
+        </div>
         <div class="cz-tab-panel" data-panel="lut" id="czPanelLut" hidden></div>
       </div>
     </aside>
@@ -806,6 +946,7 @@
       <nav class="suite-settings-tabs" role="tablist" aria-label="Settings sections">
         <button class="suite-settings-tab" data-settings-tab="general" role="tab" aria-selected="false">General</button>
         <button class="suite-settings-tab" data-settings-tab="copy" role="tab" aria-selected="false">Copy</button>
+        <button class="suite-settings-tab" data-settings-tab="search" role="tab" aria-selected="false">Search</button>
         <button class="suite-settings-tab" data-settings-tab="transcribe" role="tab" aria-selected="false">Transcribe</button>
         <button class="suite-settings-tab" data-settings-tab="edit" role="tab" aria-selected="false">Edit</button>
         <button class="suite-settings-tab" data-settings-tab="graphics" role="tab" aria-selected="false">Graphics</button>
@@ -850,6 +991,24 @@
               <span title="Per-job sequence number, zero-padded">{Seq}</span>
               <span title="File extension">{ext}</span>
             </div>
+          </div>
+        </div>
+
+        <div class="suite-settings-pane" id="settingsPaneSearch" data-settings-pane="search" hidden>
+          <div class="suite-block">
+            <h3 class="suite-block-title">Watched Roots</h3>
+            <p class="suite-hint suite-hint--tight">Folders Spyglass scans and indexes for the Search workspace.</p>
+            <div class="suite-list" id="sgRootsList">
+              <p class="suite-hint suite-hint--tight">No watched roots yet.</p>
+            </div>
+            <button class="suite-btn suite-btn--ghost" id="sgAddRoot">Add folder…</button>
+          </div>
+
+          <div class="suite-block">
+            <h3 class="suite-block-title">Tag Maintenance</h3>
+            <p class="suite-hint suite-hint--tight">Removes existing auto-generated tags that came from reading on-screen text (jersey numbers, scoreboard scores/clocks, years off a sign) instead of describing the shot itself. Doesn't touch tags you added yourself, and doesn't catch a name or other on-screen text with no digits in it.</p>
+            <button class="suite-btn suite-btn--ghost" id="sgPurgeOnscreenTextTags">Purge on-screen text tags</button>
+            <div class="suite-hint suite-hint--tight" id="sgPurgeOnscreenTextTagsResult"></div>
           </div>
         </div>
 

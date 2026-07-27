@@ -20,6 +20,12 @@
     return String(p || "").split(/[\\/]/).pop();
   }
 
+  function dirname(p) {
+    const s = String(p || "");
+    const i = s.lastIndexOf("/");
+    return i >= 0 ? s.slice(0, i) : "";
+  }
+
   function mmss(sec) {
     const s = Math.max(0, Math.floor(sec || 0));
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -77,6 +83,27 @@
     broll: null,         // { jobId, folder, clips } from the last finished analysis
     brollSel: new Map(), // "path::start::end" -> {path, start, end}
     brollSelCommitted: "[]", // JSON of the last committed selection, for the b-roll undo domain
+    spyglass: {          // Search workspace (Spyglass integration)
+      query: "",
+      results: [],
+      activeTags: new Set(),   // tag facet filter, OR'd together (matches FacetFilters.tags)
+      allTags: [],             // [{label, shot_count}] from spyglass_list_facets
+      roots: [],               // [{...WatchedRootStatus}] from spyglass_list_watched_roots
+      pool: [],                // [{...ShotSearchResult}] from spyglass_pool_get, in pool order
+      consolidateDest: "",
+      consolidateEstimate: null,
+      consolidatePolling: null, // interval id while an export is in flight
+      dateFrom: "",            // FacetFilters.date_from, "" means unset
+      dateTo: "",               // FacetFilters.date_to, "" means unset
+      favoritesOnly: false,     // FacetFilters.favorites_only
+      folderPath: null,         // FacetFilters.folder_path -- selected folder-tree node, or null for "All folders"
+      folderNodes: new Map(),   // parent path (null = top level) -> [{...FolderNode}] from spyglass_list_folder_children, lazily fetched per expand
+      folderExpanded: new Set(), // paths currently expanded in the folder tree
+      resultLimit: 60,          // current page size passed as `limit`; grows via "View more results"
+      hasMore: false,           // true when the last response came back exactly at resultLimit (more may exist)
+      sortBy: "relevance",      // FacetFilters.sort_by
+      tagFilterOpen: true,      // "Filter by tag" section collapse state
+    },
     gx: { scene: null, options: null, aiMode: "local" },
     tlCollapsed: false,  // #suiteTimeline collapsed state
     favorites: [],       // favorited transcript lines (addendum v6), backend is the source of truth
@@ -294,7 +321,7 @@
       b.classList.toggle("is-active", active);
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
-    ["cardeater", "sync", "transcribe", "broll", "edit", "harmonize", "colorize", "graphics"].forEach((ws) => {
+    ["cardeater", "sync", "transcribe", "broll", "spyglass", "edit", "harmonize", "colorize", "graphics"].forEach((ws) => {
       const c = $("workspace-" + ws);
       if (c) c.hidden = ws !== name; // display toggle only — #workspace-edit is never unmounted
     });
@@ -308,9 +335,11 @@
     // The waveform canvas is sized from its (hidden) host's clientWidth,
     // which is 0 while the workspace itself is hidden — redraw once it
     // becomes visible so it isn't stuck at a stale/zero width.
+    if (name === "spyglass") { loadSpyglassFacets(); loadSpyglassRoots(); loadSpyglassPool(); loadSpyglassFolderTree(); }
     if (name === "sync") scheduleSyncWaveformRedraw();
     if (name === "harmonize") scheduleHarmonizeWaveformRedraw();
     if (name !== "broll") stopBrollPreview();
+    if (name !== "spyglass" && !$("sgPreviewModal").hidden) closeSpyglassPreview();
     if (name !== "graphics") gxStopPlayback();
     if (name !== "sync") teardownSyncPlayer();
     if (name !== "transcribe") closeTedPlayer();
@@ -1500,6 +1529,316 @@
     updateBrollSendButton();
   }
 
+  // Phase 2 of the Spyglass integration: read-only search/browse over the
+  // whole archive. Reuses .suite-broll-grid/.suite-clip's card layout
+  // (closest existing structural analog — an async result set rendered as
+  // a thumbnail grid) rather than introducing a new CSS pattern for what
+  // is, at this phase, a materially similar shape: one card per shot with
+  // a keyframe thumbnail, caption, and tags. Facets/pool tray/tag editing/
+  // native preview are Phase 3+, not this pass.
+  const SG_RESULT_PAGE_SIZE = 60; // must match spyglass-py's DEFAULT_RESULT_LIMIT
+
+  function renderSpyglassResults() {
+    const grid = $("sgGrid");
+    const results = S.spyglass.results;
+    const loadMoreRow = $("sgLoadMoreRow");
+    if (!results || results.length === 0) {
+      $("sgResultsTitle").textContent = "Results";
+      grid.innerHTML = `<p class="suite-empty">No search yet — type a query and press Search, or Browse whole archive.</p>`;
+      if (loadMoreRow) loadMoreRow.hidden = true;
+      return;
+    }
+    const poolIds = new Set(S.spyglass.pool.map((s) => s.shot_id));
+    $("sgResultsTitle").textContent = `Results (${results.length}${S.spyglass.hasMore ? "+" : ""})`;
+    if (loadMoreRow) loadMoreRow.hidden = !S.spyglass.hasMore;
+    grid.innerHTML = results.map((s) => {
+      const thumb = s.keyframe_data_uri
+        ? `<img class="suite-clip__thumb" src="${esc(s.keyframe_data_uri)}" alt="Keyframe for ${esc(basename(s.clip_file_path))}" />`
+        : `<div class="suite-clip__thumb suite-clip__thumb--placeholder">no preview</div>`;
+      const tags = (s.tags || []).map((t) =>
+        `<span class="suite-seg-chipwrap"><span class="suite-seg-chip">${esc(t)}
+          <button type="button" class="sg-tag-remove" data-shot-id="${s.shot_id}" data-tag="${esc(t)}" title="Remove tag" aria-label="Remove tag ${esc(t)}">×</button>
+        </span></span>`).join("");
+      const inPool = poolIds.has(s.shot_id);
+      return `<div class="suite-clip" data-shot-id="${s.shot_id}">
+      <div class="suite-clip__stage sg-preview-trigger" data-shot-id="${s.shot_id}" role="button" tabindex="0" title="Click to preview ${esc(basename(s.clip_file_path))}" aria-label="Preview ${esc(basename(s.clip_file_path))}">${thumb}</div>
+      <div class="suite-clip__body">
+        <div class="suite-clip__name-row">
+          <span class="suite-clip__name" title="${esc(s.clip_file_path)}">${esc(basename(s.clip_file_path))}</span>
+          <span class="suite-clip__duration">${mmss(s.start_tc)}–${mmss(s.end_tc)}</span>
+        </div>
+        ${s.caption ? `<p class="suite-hint">${esc(s.caption)}</p>` : ""}
+        <div class="suite-clip__segments">${tags}</div>
+        <div class="suite-folder-row">
+          <button type="button" class="suite-btn suite-btn--ghost sg-favorite" data-shot-id="${s.shot_id}" data-favorite="${s.is_favorite ? "1" : "0"}">${s.is_favorite ? "★ Favorited" : "☆ Favorite"}</button>
+          <button type="button" class="suite-btn suite-btn--ghost sg-pool-toggle" data-shot-id="${s.shot_id}" data-in-pool="${inPool ? "1" : "0"}">${inPool ? "− Pool" : "+ Pool"}</button>
+        </div>
+        <div class="suite-folder-row">
+          <input type="text" class="sg-add-tag" data-shot-id="${s.shot_id}" placeholder="add tag, press Enter" aria-label="Add tag to ${esc(basename(s.clip_file_path))}" />
+        </div>
+      </div></div>`;
+    }).join("");
+  }
+
+  async function loadSpyglassFacets() {
+    const res = await call("spyglass_list_facets");
+    if (!res.ok) return;
+    S.spyglass.allTags = (res.facets && res.facets.tags) || [];
+    renderSpyglassTagFacets();
+  }
+
+  function renderSpyglassTagFacets() {
+    const box = $("sgTagFacets");
+    if (!S.spyglass.allTags.length) {
+      box.innerHTML = `<p class="suite-hint suite-hint--tight">Run a search or Browse once to populate tags.</p>`;
+      return;
+    }
+    box.innerHTML = S.spyglass.allTags.map((t) => {
+      const active = S.spyglass.activeTags.has(t.label);
+      return `<button type="button" class="suite-tag-chip ${active ? "is-active" : ""}" data-tag="${esc(t.label)}">${esc(t.label)} <span class="suite-clip__duration">${t.shot_count}</span></button>`;
+    }).join("");
+  }
+
+  // "Filter by tag" is its own collapsible section (independent of the rest
+  // of the Filters block) -- the tag list can get long once an archive has
+  // real VLM-generated tags, so hiding it shouldn't also hide date/
+  // favorites filters.
+  function renderSpyglassTagFilterCollapse() {
+    const open = S.spyglass.tagFilterOpen;
+    $("sgTagFacets").hidden = !open;
+    $("sgTagFilterChevron").textContent = open ? "▾" : "▸";
+    $("sgTagFilterToggle").setAttribute("aria-expanded", String(open));
+  }
+
+  function currentSpyglassFilters() {
+    const filters = { tags: Array.from(S.spyglass.activeTags), sort_by: S.spyglass.sortBy };
+    if (S.spyglass.dateFrom) filters.date_from = S.spyglass.dateFrom;
+    if (S.spyglass.dateTo) filters.date_to = S.spyglass.dateTo;
+    if (S.spyglass.favoritesOnly) filters.favorites_only = true;
+    if (S.spyglass.folderPath) filters.folder_path = S.spyglass.folderPath;
+    return filters;
+  }
+
+  async function runSpyglassSearchOrBrowse() {
+    const query = $("sgQuery").value.trim();
+    const filters = currentSpyglassFilters();
+    const limit = S.spyglass.resultLimit;
+    const res = query
+      ? await call("spyglass_search", query, filters, limit)
+      : await call("spyglass_browse", filters, limit);
+    if (!res.ok) { toast(res.error || "Search failed.", "error"); return; }
+    S.spyglass.results = res.results || [];
+    S.spyglass.hasMore = S.spyglass.results.length >= limit;
+    renderSpyglassResults();
+  }
+
+  // Any filter change (tag/date/favorites/folder) starts back at the
+  // first page -- only the "View more results" button itself grows
+  // resultLimit and keeps the current filters.
+  async function resetSpyglassResultsAndSearch() {
+    S.spyglass.resultLimit = SG_RESULT_PAGE_SIZE;
+    await runSpyglassSearchOrBrowse();
+  }
+
+  // ---- Folder tree (Search workspace left panel) ----
+  //
+  // There's no folder table in the schema -- watched_roots is just an
+  // allowlist of top-level scan roots, and everything below is only known
+  // via clips.file_path strings. spyglass_list_folder_children derives one
+  // level of the tree on demand (see spyglass_core::folders), so this
+  // fetches lazily per expand rather than loading the whole subtree.
+
+  function renderSpyglassFolderNodes(nodes, depth) {
+    return nodes.map((n) => {
+      const isExpanded = S.spyglass.folderExpanded.has(n.path);
+      const isSelected = S.spyglass.folderPath === n.path;
+      const children = S.spyglass.folderNodes.get(n.path);
+      const toggle = n.has_children
+        ? `<button type="button" class="sg-folder-toggle" data-path="${esc(n.path)}" aria-label="${isExpanded ? "Collapse" : "Expand"} ${esc(n.name)}">${isExpanded ? "▾" : "▸"}</button>`
+        : `<span class="sg-folder-toggle sg-folder-toggle--leaf"></span>`;
+      const row = `<div class="suite-folder-tree-row ${isSelected ? "is-selected" : ""}" style="--sg-tree-depth:${depth}">
+        ${toggle}
+        <button type="button" class="sg-folder-select" data-path="${esc(n.path)}" title="${esc(n.path)}">
+          <span class="sg-folder-name">${esc(n.name)}</span><span class="suite-list-row__meta">${n.shot_count}</span>
+        </button>
+      </div>`;
+      const childrenHtml = (isExpanded && children) ? renderSpyglassFolderNodes(children, depth + 1) : "";
+      return row + childrenHtml;
+    }).join("");
+  }
+
+  function renderSpyglassFolderTree() {
+    const box = $("sgFolderTree");
+    const topLevel = S.spyglass.folderNodes.get(null);
+    if (!topLevel || !topLevel.length) {
+      box.innerHTML = `<p class="suite-hint suite-hint--tight">No watched folders yet — add one in Settings → Search.</p>`;
+      return;
+    }
+    const allRow = `<div class="suite-folder-tree-row ${S.spyglass.folderPath === null ? "is-selected" : ""}">
+      <span class="sg-folder-toggle sg-folder-toggle--leaf"></span>
+      <button type="button" class="sg-folder-select" data-path="">All folders</button>
+    </div>`;
+    box.innerHTML = allRow + renderSpyglassFolderNodes(topLevel, 0);
+  }
+
+  async function loadSpyglassFolderChildren(parentPath) {
+    const res = await call("spyglass_list_folder_children", parentPath);
+    if (!res.ok) { toast(res.error || "Couldn't load folders.", "error"); return null; }
+    const nodes = res.nodes || [];
+    S.spyglass.folderNodes.set(parentPath, nodes);
+    return nodes;
+  }
+
+  async function loadSpyglassFolderTree() {
+    S.spyglass.folderNodes = new Map();
+    S.spyglass.folderExpanded = new Set();
+    await loadSpyglassFolderChildren(null);
+    renderSpyglassFolderTree();
+  }
+
+  async function loadSpyglassRoots() {
+    const res = await call("spyglass_list_watched_roots");
+    if (!res.ok) return;
+    S.spyglass.roots = res.roots || [];
+    renderSpyglassRoots();
+  }
+
+  function renderSpyglassRoots() {
+    const box = $("sgRootsList");
+    if (!S.spyglass.roots.length) {
+      box.innerHTML = `<p class="suite-hint suite-hint--tight">No watched roots yet.</p>`;
+      return;
+    }
+    box.innerHTML = S.spyglass.roots.map((r) => {
+      const p = r.progress || {};
+      const status = r.is_online ? "online" : "offline";
+      const meta = `${status} · ${p.indexed || 0}/${p.discovered || 0} indexed${p.queued ? `, ${p.queued} queued` : ""}${p.failed ? `, ${p.failed} failed` : ""}`;
+      return `<div class="suite-list-row" data-root-id="${r.id}">
+        <span class="suite-list-row__label" title="${esc(r.path)}">${esc(r.label)} <span class="suite-list-row__meta">${meta}</span></span>
+        <button type="button" class="sg-root-scan" data-root-id="${r.id}">Scan</button>
+        <button type="button" class="sg-root-toggle" data-root-id="${r.id}" data-access-level="${r.access_level}">${r.access_level === "paused" ? "Resume" : "Pause"}</button>
+        <button type="button" class="sg-root-reset" data-root-id="${r.id}" title="Wipe this folder's indexed clips/tags/captions and rescan it from scratch -- use after a tagging pipeline fix to re-tag just this folder">Reset &amp; rescan</button>
+        <button type="button" class="sg-root-remove suite-list-row__danger" data-root-id="${r.id}">Remove</button>
+      </div>`;
+    }).join("");
+  }
+
+  async function loadSpyglassPool() {
+    const res = await call("spyglass_pool_get");
+    if (!res.ok) return;
+    S.spyglass.pool = res.results || [];
+    renderSpyglassPool();
+    renderSpyglassResults(); // refresh "+ Pool"/"− Pool" button state on any visible cards
+  }
+
+  function renderSpyglassPool() {
+    const box = $("sgPoolList");
+    $("sgPoolCount").textContent = S.spyglass.pool.length;
+    if (!S.spyglass.pool.length) {
+      box.innerHTML = `<p class="suite-hint suite-hint--tight">Nothing pooled yet — click "+ Pool" on a result.</p>`;
+      return;
+    }
+    box.innerHTML = S.spyglass.pool.map((s, i) => `<div class="suite-list-row" data-shot-id="${s.shot_id}">
+      <span class="suite-list-row__label" title="${esc(s.clip_file_path)}">${esc(basename(s.clip_file_path))} <span class="suite-list-row__meta">${mmss(s.start_tc)}–${mmss(s.end_tc)}</span></span>
+      <button type="button" class="sg-pool-up" data-index="${i}" ${i === 0 ? "disabled" : ""} title="Move up">↑</button>
+      <button type="button" class="sg-pool-down" data-index="${i}" ${i === S.spyglass.pool.length - 1 ? "disabled" : ""} title="Move down">↓</button>
+      <button type="button" class="sg-pool-remove suite-list-row__danger" data-shot-id="${s.shot_id}">Remove</button>
+    </div>`).join("");
+  }
+
+  // ---- pool send-to: B-Roll Analyzer / Edit's B-Roll pool / Colorize ----
+  //
+  // Three hand-offs off the same pool tray, each reusing the target
+  // workspace's own existing entry point rather than inventing a new
+  // backend contract:
+  //  - B-Roll Analyzer only analyzes a whole FOLDER (broll_start), same
+  //    as Card Eater's own ceSendToBroll -- a pooled shot has no
+  //    per-clip analyze call to hand off to, so this kicks one analysis
+  //    job per unique parent folder among the pooled shots.
+  //  - Edit's B-Roll pool is broll_send_to_edit's favorites-store target
+  //    (kind="broll") -- the exact same call the B-Roll workspace's own
+  //    "Send to Edit" button makes.
+  //  - Colorize has no direct API call for "add this known path" from
+  //    outside its own file; per colorize.js's file header, cross-
+  //    workspace coupling to it is a DOM CustomEvent, not a shared JS
+  //    closure.
+
+  async function sgSendPoolToBroll() {
+    const pool = S.spyglass.pool;
+    if (!pool.length) { toast("The pool is empty — add shots before sending.", "error"); return; }
+    const folders = Array.from(new Set(pool.map((s) => dirname(s.clip_file_path)).filter(Boolean)));
+    if (!folders.length) { toast("Couldn't resolve a folder to analyze for these shots.", "error"); return; }
+    let started = 0;
+    for (const folder of folders) {
+      const res = await call("broll_start", folder);
+      if (res.ok) started++;
+      else toastIfError(res, `Couldn't start B-Roll analysis for ${basename(folder)}.`);
+    }
+    if (!started) return;
+    const folderInput = $("bFolder");
+    if (folderInput) folderInput.value = folders[folders.length - 1];
+    switchWs("broll");
+    ensurePolling();
+    openDrawer();
+    toast(`Sent to B-Roll Analyzer — analyzing ${started} folder${started === 1 ? "" : "s"} `
+      + `(${pool.length} pooled shot${pool.length === 1 ? "" : "s"}).`, "ok");
+  }
+
+  async function sgSendPoolToEditBroll() {
+    const pool = S.spyglass.pool;
+    if (!pool.length) { toast("The pool is empty — add shots before sending.", "error"); return; }
+    const selections = pool.map((s) => ({ path: s.clip_file_path, start: s.start_tc, end: s.end_tc }));
+    const res = await call("broll_send_to_edit", selections);
+    if (!res.ok) { toastIfError(res, "Couldn't send the pool to Edit."); return; }
+    const added = res.added || [];
+    S.favorites.push(...added);
+    renderBrollFavoritesPanel();
+    refreshCutsRowFavoriteMarkers();
+    refreshPreviewFavoriteStar();
+    revealOutputBlockIfHidden();
+    toast(`Sent ${added.length} shot${added.length === 1 ? "" : "s"} to Rough Cut Studio's B-Roll pool.`, "ok");
+    switchWs("edit");
+    if (typeof activateTab === "function") activateTab("broll");
+  }
+
+  function sgSendPoolToColorize() {
+    const pool = S.spyglass.pool;
+    if (!pool.length) { toast("The pool is empty — add shots before sending.", "error"); return; }
+    const paths = Array.from(new Set(pool.map((s) => s.clip_file_path).filter(Boolean)));
+    switchWs("colorize");
+    document.dispatchEvent(new CustomEvent("suite:send-to-colorize", { detail: { paths } }));
+  }
+
+  // Click-to-play preview: ports Spyglass's own ShotPreviewPlayer.tsx
+  // almost exactly (same placeholder-measure-and-Y-flip approach) --
+  // the one thing NOT assumed to carry over unchanged from the original
+  // Tauri/wry implementation is the coordinate math itself. A live Phase
+  // 4 spike measured pywebview's cocoa webview's own AppKit frame side
+  // by side against this exact `window.innerHeight` value and found them
+  // identical (no ~32pt titlebar-overlap discrepancy the way wry had) --
+  // so the flip below is confirmed correct for pywebview, not carried
+  // over on faith.
+  async function openSpyglassPreview(shot) {
+    $("sgPreviewPath").textContent = shot.clip_file_path;
+    $("sgPreviewPath").title = shot.clip_file_path;
+    $("sgPreviewModal").hidden = false;
+
+    const stage = $("sgPreviewStage");
+    const rect = stage.getBoundingClientRect();
+    const res = await call(
+      "spyglass_open_preview", shot.clip_file_path, shot.start_tc,
+      rect.left, window.innerHeight - rect.top - rect.height, rect.width, rect.height);
+    if (!res.ok) {
+      toast(res.error || "Couldn't open the preview.", "error");
+      $("sgPreviewModal").hidden = true;
+    }
+  }
+
+  async function closeSpyglassPreview() {
+    $("sgPreviewModal").hidden = true;
+    await call("spyglass_close_preview");
+  }
+
   // RCS's own #outputBlock (Script/Cuts/Export/History, plus the
   // suite-injected Favorites/B-Roll tabs — see injectFavoritesTab/
   // injectBrollFavoritesTab) starts `hidden` and RCS only unhides it once a
@@ -1796,6 +2135,456 @@
       const res = await call("broll_export_xml", S.broll.jobId, paths.length ? paths : null);
       if (!res.ok) { toastIfError(res, "Couldn't export the Premiere XML."); return; }
       toast(`Premiere XML saved to ${res.path}`, "ok");
+    });
+  }
+
+  // ============================================================
+  // Pool & Export panel: user-adjustable width, dragged via #sgPoolResize
+  // (the grid column between results and the pool aside — see
+  // .suite-ws--spyglass's `var(--sg-pool-w, 300px)` track). Persisted in
+  // localStorage, same pattern as CardEater's viewer-width resizer.
+  // ============================================================
+
+  const SG_POOL_WIDTH_MIN = 260;
+  const SG_POOL_WIDTH_MAX = 640;
+  const SG_POOL_WIDTH_STORAGE_KEY = "suiteSgPoolWidth.v1";
+
+  function sgGetPoolWidthPx() {
+    const ws = $("workspace-spyglass");
+    const raw = parseFloat(getComputedStyle(ws).getPropertyValue("--sg-pool-w"));
+    return isNaN(raw) ? 300 : raw;
+  }
+
+  function sgSetPoolWidthPx(px) {
+    const clamped = Math.max(SG_POOL_WIDTH_MIN, Math.min(SG_POOL_WIDTH_MAX, px));
+    $("workspace-spyglass").style.setProperty("--sg-pool-w", clamped + "px");
+    return clamped;
+  }
+
+  function sgLoadSavedPoolWidth() {
+    let saved;
+    try {
+      saved = parseFloat(localStorage.getItem(SG_POOL_WIDTH_STORAGE_KEY));
+    } catch (e) {
+      return;
+    }
+    if (!isNaN(saved) && saved > 0) sgSetPoolWidthPx(saved);
+  }
+
+  function sgWirePoolResize() {
+    const handle = $("sgPoolResize");
+    if (!handle) return;
+
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = sgGetPoolWidthPx();
+
+      document.body.classList.add("suite-sg-pool-resizing");
+      handle.classList.add("is-dragging");
+
+      function onMove(ev) {
+        // Pool panel sits to the RIGHT of the handle, so dragging left
+        // (negative delta) widens it and dragging right narrows it.
+        const delta = ev.clientX - startX;
+        sgSetPoolWidthPx(startWidth - delta);
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.classList.remove("suite-sg-pool-resizing");
+        handle.classList.remove("is-dragging");
+        try {
+          localStorage.setItem(SG_POOL_WIDTH_STORAGE_KEY, String(sgGetPoolWidthPx()));
+        } catch (e) {
+          // Private-browsing quota or localStorage disabled -- resizing
+          // still works for the rest of this session, it just won't persist.
+        }
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // Keyboard nudge, since the handle is a focusable separator (arrow
+    // keys are the conventional way to resize a native splitter).
+    handle.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") { e.preventDefault(); sgSetPoolWidthPx(sgGetPoolWidthPx() + 16); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); sgSetPoolWidthPx(sgGetPoolWidthPx() - 16); }
+      else return;
+      try {
+        localStorage.setItem(SG_POOL_WIDTH_STORAGE_KEY, String(sgGetPoolWidthPx()));
+      } catch (err) { /* see onUp above */ }
+    });
+  }
+
+  function wireSpyglass() {
+    sgLoadSavedPoolWidth();
+    sgWirePoolResize();
+
+    async function runSearchOrBrowse() {
+      const btn = $("sgSearch");
+      btn.disabled = true;
+      await resetSpyglassResultsAndSearch();
+      btn.disabled = false;
+      loadSpyglassFacets(); // tag counts depend on what's actually in the archive, cheap to refresh
+    }
+
+    $("sgSearch").addEventListener("click", runSearchOrBrowse);
+    $("sgQuery").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") runSearchOrBrowse();
+    });
+
+    $("sgBrowseAll").addEventListener("click", async () => {
+      $("sgQuery").value = "";
+      await runSearchOrBrowse();
+    });
+
+    $("sgTagFacets").addEventListener("click", async (e) => {
+      const chip = e.target.closest(".suite-tag-chip");
+      if (!chip) return;
+      const tag = chip.dataset.tag;
+      if (S.spyglass.activeTags.has(tag)) S.spyglass.activeTags.delete(tag);
+      else S.spyglass.activeTags.add(tag);
+      renderSpyglassTagFacets();
+      await resetSpyglassResultsAndSearch();
+    });
+
+    // ---- date range / favorites-only filters ----
+
+    $("sgDateFrom").addEventListener("change", async () => {
+      S.spyglass.dateFrom = $("sgDateFrom").value;
+      await resetSpyglassResultsAndSearch();
+    });
+    $("sgDateTo").addEventListener("change", async () => {
+      S.spyglass.dateTo = $("sgDateTo").value;
+      await resetSpyglassResultsAndSearch();
+    });
+    $("sgFavoritesOnly").addEventListener("change", async () => {
+      S.spyglass.favoritesOnly = $("sgFavoritesOnly").checked;
+      await resetSpyglassResultsAndSearch();
+    });
+
+    // ---- sort ----
+
+    $("sgSortBy").addEventListener("change", async () => {
+      S.spyglass.sortBy = $("sgSortBy").value;
+      await resetSpyglassResultsAndSearch();
+    });
+
+    // ---- filter-by-tag collapse ----
+
+    $("sgTagFilterToggle").addEventListener("click", () => {
+      S.spyglass.tagFilterOpen = !S.spyglass.tagFilterOpen;
+      renderSpyglassTagFilterCollapse();
+    });
+    renderSpyglassTagFilterCollapse();
+
+    // ---- folder tree ----
+
+    $("sgFolderTree").addEventListener("click", async (e) => {
+      const toggleBtn = e.target.closest(".sg-folder-toggle");
+      if (toggleBtn && !toggleBtn.classList.contains("sg-folder-toggle--leaf")) {
+        const path = toggleBtn.dataset.path;
+        if (S.spyglass.folderExpanded.has(path)) {
+          S.spyglass.folderExpanded.delete(path);
+        } else {
+          S.spyglass.folderExpanded.add(path);
+          if (!S.spyglass.folderNodes.has(path)) await loadSpyglassFolderChildren(path);
+        }
+        renderSpyglassFolderTree();
+        return;
+      }
+      const selectBtn = e.target.closest(".sg-folder-select");
+      if (selectBtn) {
+        S.spyglass.folderPath = selectBtn.dataset.path || null;
+        renderSpyglassFolderTree();
+        await resetSpyglassResultsAndSearch();
+      }
+    });
+
+    // ---- view more results ----
+
+    $("sgLoadMore").addEventListener("click", async () => {
+      const btn = $("sgLoadMore");
+      btn.disabled = true;
+      S.spyglass.resultLimit += SG_RESULT_PAGE_SIZE;
+      await runSpyglassSearchOrBrowse();
+      btn.disabled = false;
+    });
+
+    // ---- result-card actions (favorite / pool / tags) ----
+
+    $("sgGrid").addEventListener("click", async (e) => {
+      const favBtn = e.target.closest(".sg-favorite");
+      if (favBtn) {
+        const shotId = parseInt(favBtn.dataset.shotId, 10);
+        const nowFavorite = favBtn.dataset.favorite !== "1";
+        const res = await call("spyglass_set_favorite", shotId, nowFavorite);
+        if (!res.ok) { toast(res.error || "Couldn't update favorite.", "error"); return; }
+        const shot = S.spyglass.results.find((s) => s.shot_id === shotId);
+        if (shot) shot.is_favorite = nowFavorite;
+        renderSpyglassResults();
+        return;
+      }
+      const poolBtn = e.target.closest(".sg-pool-toggle");
+      if (poolBtn) {
+        const shotId = parseInt(poolBtn.dataset.shotId, 10);
+        const inPool = poolBtn.dataset.inPool === "1";
+        const res = await call(inPool ? "spyglass_pool_remove" : "spyglass_pool_add", shotId);
+        if (!res.ok) { toast(res.error || "Couldn't update the pool.", "error"); return; }
+        await loadSpyglassPool();
+        return;
+      }
+      const previewTrigger = e.target.closest(".sg-preview-trigger");
+      if (previewTrigger) {
+        const shotId = parseInt(previewTrigger.dataset.shotId, 10);
+        const shot = S.spyglass.results.find((s) => s.shot_id === shotId);
+        if (shot) await openSpyglassPreview(shot);
+        return;
+      }
+      const tagRemoveBtn = e.target.closest(".sg-tag-remove");
+      if (tagRemoveBtn) {
+        const shotId = parseInt(tagRemoveBtn.dataset.shotId, 10);
+        const res = await call("spyglass_remove_tag", shotId, tagRemoveBtn.dataset.tag);
+        if (!res.ok) { toast(res.error || "Couldn't remove tag.", "error"); return; }
+        const shot = S.spyglass.results.find((s) => s.shot_id === shotId);
+        if (shot) shot.tags = (shot.tags || []).filter((t) => t !== tagRemoveBtn.dataset.tag);
+        renderSpyglassResults();
+      }
+    });
+
+    $("sgGrid").addEventListener("keydown", async (e) => {
+      const trigger = e.target.closest(".sg-preview-trigger");
+      if (trigger && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        const shotId = parseInt(trigger.dataset.shotId, 10);
+        const shot = S.spyglass.results.find((s) => s.shot_id === shotId);
+        if (shot) await openSpyglassPreview(shot);
+        return;
+      }
+      const input = e.target.closest(".sg-add-tag");
+      if (!input || e.key !== "Enter") return;
+      const label = input.value.trim();
+      if (!label) return;
+      const shotId = parseInt(input.dataset.shotId, 10);
+      const res = await call("spyglass_add_tag", shotId, label);
+      if (!res.ok) { toast(res.error || "Couldn't add tag.", "error"); return; }
+      const shot = S.spyglass.results.find((s) => s.shot_id === shotId);
+      if (shot) { shot.tags = shot.tags || []; if (!shot.tags.includes(label)) shot.tags.push(label); }
+      renderSpyglassResults();
+    });
+
+    // ---- watched roots ----
+
+    $("sgAddRoot").addEventListener("click", async () => {
+      const picked = await call("spyglass_pick_watched_root_folder");
+      if (!picked.ok) { toastIfError(picked, "Couldn't open the folder dialog."); return; }
+      if (!picked.path) return;
+      const res = await call("spyglass_add_watched_root", basename(picked.path), picked.path);
+      if (!res.ok) { toast(res.error || "Couldn't add that folder.", "error"); return; }
+      toast(`Added watched root "${basename(picked.path)}".`, "ok");
+      await loadSpyglassRoots();
+    });
+
+    $("sgRootsList").addEventListener("click", async (e) => {
+      const scanBtn = e.target.closest(".sg-root-scan");
+      if (scanBtn) {
+        const rootId = parseInt(scanBtn.dataset.rootId, 10);
+        const root = S.spyglass.roots.find((r) => r.id === rootId);
+        const res = await call("spyglass_scan_watched_root", rootId, root ? root.label : null);
+        if (!res.ok) { toast(res.error || "Couldn't start the scan.", "error"); return; }
+        toast(`Scanning "${root ? root.label : rootId}"…`, "ok");
+        ensurePolling();
+        openDrawer();
+        return;
+      }
+      const toggleBtn = e.target.closest(".sg-root-toggle");
+      if (toggleBtn) {
+        const rootId = parseInt(toggleBtn.dataset.rootId, 10);
+        const nextLevel = toggleBtn.dataset.accessLevel === "paused" ? "active" : "paused";
+        const res = await call("spyglass_set_watched_root_access_level", rootId, nextLevel);
+        if (!res.ok) { toast(res.error || "Couldn't update that root.", "error"); return; }
+        await loadSpyglassRoots();
+        return;
+      }
+      const resetBtn = e.target.closest(".sg-root-reset");
+      if (resetBtn) {
+        const rootId = parseInt(resetBtn.dataset.rootId, 10);
+        const root = S.spyglass.roots.find((r) => r.id === rootId);
+        const label = root ? root.label : rootId;
+        if (!confirm(`Reset "${label}"? This clears every indexed clip/tag/caption under this folder and rescans it from scratch with the current pipeline. Other watched folders aren't affected.`)) return;
+        const res = await call("spyglass_reset_watched_root", rootId);
+        if (!res.ok) { toast(res.error || "Couldn't reset that root.", "error"); return; }
+        toast(`Cleared ${res.removed} clip(s) from "${label}" — rescanning…`, "ok");
+        const scanRes = await call("spyglass_scan_watched_root", rootId, root ? root.label : null);
+        if (!scanRes.ok) { toast(scanRes.error || "Reset done, but couldn't start the rescan.", "error"); await loadSpyglassRoots(); return; }
+        ensurePolling();
+        openDrawer();
+        await loadSpyglassRoots();
+        return;
+      }
+      const removeBtn = e.target.closest(".sg-root-remove");
+      if (removeBtn) {
+        const rootId = parseInt(removeBtn.dataset.rootId, 10);
+        if (!confirm("Remove this watched root? This purges every indexed clip under its path.")) return;
+        const res = await call("spyglass_remove_watched_root", rootId);
+        if (!res.ok) { toast(res.error || "Couldn't remove that root.", "error"); return; }
+        await loadSpyglassRoots();
+      }
+    });
+
+    // ---- tag maintenance ----
+
+    $("sgPurgeOnscreenTextTags").addEventListener("click", async () => {
+      if (!confirm("Purge on-screen text tags and gender/headcount tags? This removes every auto-generated tag containing a digit (jersey numbers, scoreboard scores/clocks, signs) or a boy/girl gender or headcount word across the whole archive. Tags you added yourself are not affected. This can't be undone.")) return;
+      const btn = $("sgPurgeOnscreenTextTags");
+      const resultBox = $("sgPurgeOnscreenTextTagsResult");
+      btn.disabled = true;
+      const res = await call("spyglass_purge_onscreen_text_tags");
+      btn.disabled = false;
+      if (!res.ok) { toast(res.error || "Couldn't purge tags.", "error"); return; }
+      resultBox.textContent = `Removed ${res.removed} tag${res.removed === 1 ? "" : "s"}.`;
+      toast(`Removed ${res.removed} on-screen-text/gender tag${res.removed === 1 ? "" : "s"}.`, "ok");
+      loadSpyglassFacets(); // tag counts/options changed archive-wide
+      // Strip the same digit-containing and gender/headcount tags from
+      // already-loaded result cards in place -- matches the backend's own
+      // purge predicates, so the visible chips reflect the purge
+      // immediately without needing to re-run the last search/browse.
+      const SG_GENDER_WORDS = new Set(["boy", "boys", "girl", "girls", "male", "female", "males", "females"]);
+      S.spyglass.results.forEach((s) => {
+        s.tags = (s.tags || []).filter((t) => !/\d/.test(t) && !t.split(" ").some((w) => SG_GENDER_WORDS.has(w)));
+      });
+      renderSpyglassResults();
+    });
+
+    // ---- pool tray ----
+
+    $("sgPoolList").addEventListener("click", async (e) => {
+      const removeBtn = e.target.closest(".sg-pool-remove");
+      if (removeBtn) {
+        const res = await call("spyglass_pool_remove", parseInt(removeBtn.dataset.shotId, 10));
+        if (!res.ok) { toast(res.error || "Couldn't remove from the pool.", "error"); return; }
+        await loadSpyglassPool();
+        return;
+      }
+      const upBtn = e.target.closest(".sg-pool-up");
+      const downBtn = e.target.closest(".sg-pool-down");
+      if (upBtn || downBtn) {
+        const i = parseInt((upBtn || downBtn).dataset.index, 10);
+        const j = upBtn ? i - 1 : i + 1;
+        const ids = S.spyglass.pool.map((s) => s.shot_id);
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        const res = await call("spyglass_pool_reorder", ids);
+        if (!res.ok) { toast(res.error || "Couldn't reorder the pool.", "error"); return; }
+        await loadSpyglassPool();
+      }
+    });
+
+    $("sgPoolClear").addEventListener("click", async () => {
+      if (S.spyglass.pool.length && !confirm("Clear the whole pool?")) return;
+      const res = await call("spyglass_pool_clear");
+      if (!res.ok) { toast(res.error || "Couldn't clear the pool.", "error"); return; }
+      await loadSpyglassPool();
+    });
+
+    $("sgPoolExportXml").addEventListener("click", async () => {
+      if (!S.spyglass.pool.length) { toast("The pool is empty — add shots before exporting.", "error"); return; }
+      const sequenceName = `Spyglass Pool ${new Date().toISOString().slice(0, 10)}`;
+      const res = await call("spyglass_export_pool_xml", sequenceName);
+      if (!res.ok) { toastIfError(res, "Couldn't export the Premiere XML."); return; }
+      toast(`Premiere XML saved to ${res.path}`, "ok");
+    });
+
+    $("sgSendBroll").addEventListener("click", sgSendPoolToBroll);
+    $("sgSendEditBroll").addEventListener("click", sgSendPoolToEditBroll);
+    $("sgSendColorize").addEventListener("click", sgSendPoolToColorize);
+
+    // ---- consolidate & copy export ----
+
+    function selectedCopyMode() {
+      const mode = $("sgCopyMode").value;
+      if (mode === "trimmed") return { mode: "trimmed", handle_seconds: 1.0, precision: "stream_copy" };
+      return { mode: "full_source" };
+    }
+
+    async function refreshConsolidateEstimate() {
+      if (!S.spyglass.consolidateDest) return;
+      const res = await call("spyglass_estimate_consolidate_export", S.spyglass.consolidateDest, selectedCopyMode());
+      if (!res.ok) {
+        $("sgConsolidateEstimate").textContent = res.error || "Couldn't estimate this export.";
+        $("sgConsolidateStart").disabled = true;
+        return;
+      }
+      const e = res.estimate;
+      const gb = (e.total_bytes / 1e9).toFixed(2);
+      const availGb = (e.available_bytes / 1e9).toFixed(1);
+      $("sgConsolidateEstimate").textContent =
+        `${e.file_count} file(s), ~${gb} GB — ${availGb} GB available at destination` +
+        (e.destination_has_existing_files ? " (destination already has files)" : "");
+      $("sgConsolidateStart").disabled = false;
+    }
+
+    $("sgPickConsolidateDest").addEventListener("click", async () => {
+      const picked = await call("spyglass_pick_consolidate_destination");
+      if (!picked.ok) { toastIfError(picked, "Couldn't open the folder dialog."); return; }
+      if (!picked.path) return;
+      S.spyglass.consolidateDest = picked.path;
+      $("sgConsolidateDest").value = picked.path;
+      await refreshConsolidateEstimate();
+    });
+
+    $("sgCopyMode").addEventListener("change", refreshConsolidateEstimate);
+
+    $("sgConsolidateStart").addEventListener("click", async () => {
+      if (!S.spyglass.consolidateDest) { toast("Choose a destination folder first.", "error"); return; }
+      const btn = $("sgConsolidateStart");
+      btn.disabled = true;
+      const poolName = `spyglass_${new Date().toISOString().slice(0, 10)}`;
+      const res = await call(
+        "spyglass_start_consolidate_export", S.spyglass.consolidateDest, poolName,
+        selectedCopyMode(), $("sgFolderStructure").value);
+      if (!res.ok) { toast(res.error || "Couldn't start the export.", "error"); btn.disabled = false; return; }
+      toast("Consolidate export started…", "ok");
+      $("sgConsolidateProgress").textContent = "Running…";
+      if (S.spyglass.consolidatePolling) clearInterval(S.spyglass.consolidatePolling);
+      S.spyglass.consolidatePolling = setInterval(async () => {
+        const statusRes = await call("spyglass_consolidate_export_status");
+        if (!statusRes.ok || !statusRes.status) return;
+        const st = statusRes.status;
+        if (!st.finished) {
+          $("sgConsolidateProgress").textContent = `${st.completed}/${st.total} — ${st.current_file || "…"}`;
+          return;
+        }
+        clearInterval(S.spyglass.consolidatePolling);
+        S.spyglass.consolidatePolling = null;
+        btn.disabled = false;
+        if (st.error) {
+          $("sgConsolidateProgress").textContent = `Failed: ${st.error}`;
+          toast(`Consolidate export failed: ${st.error}`, "error");
+        } else {
+          $("sgConsolidateProgress").textContent = `Done — ${st.completed}/${st.total} file(s) copied.`;
+          toast("Consolidate export complete.", "ok");
+          $("sgExportCopiedXml").disabled = false;
+        }
+      }, 500);
+    });
+
+    $("sgExportCopiedXml").addEventListener("click", async () => {
+      const sequenceName = `Spyglass Copied ${new Date().toISOString().slice(0, 10)}`;
+      const res = await call("spyglass_export_copied_files_xml", sequenceName);
+      if (!res.ok) { toastIfError(res, "Couldn't export the Premiere XML."); return; }
+      toast(`Premiere XML saved to ${res.path}`, "ok");
+    });
+
+    // ---- native preview modal ----
+
+    $("sgPreviewClose").addEventListener("click", closeSpyglassPreview);
+    $("sgPreviewModal").addEventListener("click", (e) => {
+      if (e.target.id === "sgPreviewModal") closeSpyglassPreview(); // backdrop click
+    });
+    $("sgPreviewReveal").addEventListener("click", () => {
+      const path = $("sgPreviewPath").textContent;
+      if (path) call("suite_reveal_broll_media", path); // generic path-reveal helper, not actually B-Roll-specific
     });
   }
 
@@ -4215,7 +5004,7 @@
     return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
   }
 
-  const SETTINGS_TABS = ["general", "copy", "transcribe", "edit", "graphics"];
+  const SETTINGS_TABS = ["general", "copy", "search", "transcribe", "edit", "graphics"];
 
   function openSuiteSettings(tab) {
     $("suiteSettingsModal").hidden = false;
@@ -4245,6 +5034,8 @@
     } else if (tab === "copy") {
       ceRenderTemplateSelect();
       ceApplyDraftToForm();
+    } else if (tab === "search") {
+      loadSpyglassRoots();
     } else if (tab === "transcribe") {
       refreshTokenStatus();
     } else if (tab === "graphics") {
@@ -7296,6 +8087,7 @@
     wireSync();
     wireTranscribe();
     wireBroll();
+    wireSpyglass();
     wireHarmonize();
     wireGraphics();
     wireSuiteUndoKeys();
@@ -7315,7 +8107,7 @@
     relocateLlmProviderSettings();
     restoreSuiteSettings();
     restoreSuitePipelineSettings();
-    switchWs("transcribe");
+    switchWs("spyglass");
 
     await loadFavorites();
     refreshCutsRowFavoriteMarkers();
@@ -7345,7 +8137,7 @@
     refreshBranderGeminiKeyStatus();
 
     // Default workspace: Edit if RCS has restorable state (its recovery
-    // banner will be showing), otherwise Transcribe.
+    // banner will be showing), otherwise Search.
     const a = suiteApi();
     if (a && typeof a.check_autosave === "function") {
       try {

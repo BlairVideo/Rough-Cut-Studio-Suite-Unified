@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1,<2"]
+build-backend = "maturin"
+
+[project]
+name = "spyglass-core"
+version = "0.1.0"
+description = "PyO3 bindings linking Spyglass's Rust engine (crates/spyglass-engine + crates/spyglass-core) directly into Rough Cut Studio Suite's shared Python process -- see apps/suite-wrapper/backend/spyglass_bridge.py in the Suite repo for the actual integration."
+requires-python = ">=3.13"
+
+[tool.maturin]
+# Cargo.toml's own `[lib] name = "spyglass_core"` already matches the
+# desired `import spyglass_core` name, so no module-name override needed.
+# `extension-module` is already an unconditional (non-optional) pyo3
+# dependency feature in Cargo.toml -- unlike the typical maturin project
+# template, this repo doesn't gate it behind a default-off Cargo feature,
+# so there's nothing to pass here; `cargo build`/`test` work directly via
+# the `.cargo/config.toml` linker-flag fix instead (see that file).

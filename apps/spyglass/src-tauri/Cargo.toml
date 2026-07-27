@@ -1,0 +1,36 @@
+[package]
+name = "spyglass"
+version = "0.1.0"
+description = "Spyglass - content-aware shot search for Rough Cut Studio Suite"
+authors = ["you"]
+edition.workspace = true
+
+[lib]
+name = "spyglass_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+spyglass-core = { path = "../crates/spyglass-core" }
+spyglass-engine = { path = "../crates/spyglass-engine" }
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2.7.1"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+thiserror = "2.0.18"
+chrono = "0.4.45"
+tokio = { version = "1.52.4", features = ["rt-multi-thread", "fs", "sync", "time", "macros", "process"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSResponder", "NSView", "NSWindow"] }
+objc2-av-foundation = { version = "0.3.2", features = ["objc2-core-media"] }
+objc2-av-kit = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-media = { version = "0.3.2", default-features = false, features = ["CMTime", "CMTimeRange"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSArray", "NSGeometry", "NSString", "NSURL", "NSValue"] }

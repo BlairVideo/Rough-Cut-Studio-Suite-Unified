@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/spyglass-core", "crates/spyglass-engine", "crates/spyglass-py", "src-tauri"]
+
+[workspace.package]
+edition = "2021"
+
+# Release builds are what actually ships (Phase 7 packaging) and do the
+# heavy lifting -- checksum hashing over multi-GB clips, cosine-similarity
+# search scans, native AVFoundation preview glue -- so it's worth paying
+# extra compile time for a faster, smaller binary. `panic = "abort"` is
+# deliberately NOT set here: `gap_fill_worker.rs`'s worker loop and several
+# `commands.rs` handlers run on `spawn_blocking` and explicitly catch a
+# panicked task as a `JoinError` to fail just that one job/command --
+# `panic = "abort"` would turn any such panic into a whole-app crash
+# instead, which is a real regression for code that processes arbitrary
+# user media files.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
