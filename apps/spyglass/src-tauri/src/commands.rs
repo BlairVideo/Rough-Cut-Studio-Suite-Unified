@@ -953,3 +953,60 @@ pub fn purge_bad_tags(state: State<Arc<EngineState>>) -> Result<usize, String> {
     let gender = spyglass_core::db::purge_gender_tags(&conn).map_err(|e| e.to_string())?;
     Ok(onscreen_text + ui_text + gender)
 }
+
+/// Retroactive repair for clips indexed before `sidecar/analyze_clip.py`'s
+/// scene-cut detector sensitivity fix (`min_scene_len` on `ContentDetector`
+/// plus the `_merge_short_scenes` backstop): finds every clip with at
+/// least one shot shorter than `spyglass_core::db::MIN_SHOT_DURATION_SEC`
+/// (fast pans, camera flashes, and quick highlight-reel cuts used to
+/// register as their own spurious sub-second "shots," each paying the
+/// full keyframe/CLIP-embedding/VLM-caption cost), wipes just those clips'
+/// shots/tags/embeddings, and requeues them for a fresh gap-fill pass --
+/// clips that never had the problem are left completely untouched, unlike
+/// `reset_watched_root`'s whole-folder wipe. Also deletes each affected
+/// clip's cached keyframe directory, same as `reset_watched_root` does,
+/// since re-analysis producing fewer (merged) shots than before would
+/// otherwise leave the old higher-numbered keyframe JPEGs behind as
+/// orphaned files. Destructive -- the frontend must confirm with the user
+/// before calling this, same contract as `reset_watched_root`. Returns the
+/// number of clips requeued; the actual re-analysis happens asynchronously
+/// via the normal gap-fill worker queue, same as any other queued job.
+#[tauri::command]
+pub fn requeue_short_shot_clips(state: State<Arc<EngineState>>) -> Result<usize, String> {
+    let result = {
+        let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
+        let clip_ids = db::find_clips_with_short_shots(&conn, db::MIN_SHOT_DURATION_SEC)
+            .map_err(|e| e.to_string())?;
+        db::requeue_clips_with_short_shots(&conn, &clip_ids).map_err(|e| e.to_string())?
+    };
+    if let Some(keyframe_root) = state.db.path.parent().map(|p| p.join("keyframes")) {
+        for clip_id in &result.requeued_clip_ids {
+            let _ = std::fs::remove_dir_all(keyframe_root.join(clip_id.to_string()));
+        }
+    }
+    Ok(result.clips_requeued)
+}
+
+/// Best-effort read-ahead: touches the first few MB of `path` on a
+/// background thread, fire-and-forget. Called from the frontend on shot
+/// hover (before the user actually clicks to preview), so a sleeping
+/// external/archival drive gets a head start waking up and the OS/SMB
+/// layer gets a head start warming its cache, ahead of when
+/// `open_native_video_preview` actually needs the file. Errors (file
+/// gone, drive unmounted, etc.) are swallowed -- this is purely a latency
+/// optimization for the real open, never something the frontend needs to
+/// react to.
+#[tauri::command]
+pub fn prefetch_clip_file(path: String) {
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let Ok(mut file) = std::fs::File::open(&path) else { return };
+        let mut buf = [0u8; 1024 * 1024];
+        for _ in 0..4 {
+            match file.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    });
+}

@@ -1,7 +1,7 @@
 use crate::models::{
     AccessLevel, Clip, GapFillJob, GapFillProgress, JobStatus, NewClip, NewTranscriptSegment,
-    NewWatchedRoot, ResetWatchedRootResult, SourceApp, TranscriptSearchResult, TranscriptSegment,
-    WatchedRoot,
+    NewWatchedRoot, ResetWatchedRootResult, ShotReanalysisResult, SourceApp, TranscriptSearchResult,
+    TranscriptSegment, WatchedRoot,
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use rusqlite_migration::{Migrations, M};
@@ -28,6 +28,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../migrations/008_drop_shot_scrub_frames.sql")),
         M::up(include_str!("../migrations/009_add_caption_hub_score.sql")),
         M::up(include_str!("../migrations/010_add_shot_favorite.sql")),
+        M::up(include_str!("../migrations/011_add_alias_links.sql")),
     ])
 }
 
@@ -629,6 +630,100 @@ pub fn reset_watched_root(conn: &Connection, id: i64) -> rusqlite::Result<ResetW
         params![id],
     )?;
     Ok(ResetWatchedRootResult { clips_removed: removed_clip_ids.len(), removed_clip_ids })
+}
+
+/// Matches `sidecar/analyze_clip.py`'s `MIN_SHOT_DURATION_SEC` -- the
+/// scene-cut detector's own minimum shot length. Duplicated here (rather
+/// than shared across the Rust/Python process boundary) because this only
+/// runs against already-indexed rows on the Rust side; keep the two in
+/// sync by hand if that constant ever changes.
+pub const MIN_SHOT_DURATION_SEC: f64 = 1.0;
+
+/// Finds every clip with at least one shot shorter than `min_duration_sec`
+/// -- the fallout of a since-fixed scene-cut detector sensitivity bug
+/// (`sidecar/analyze_clip.py`'s `ContentDetector` used to run with its
+/// stock ~0.5s `min_scene_len`, short enough that fast pans, camera
+/// flashes, and quick highlight-reel cuts in real event footage routinely
+/// registered as their own spurious "shots," each paying the full
+/// keyframe/CLIP-embedding/VLM-caption cost for a span too brief to ever
+/// be a useful search result or export unit). Returns clip ids only --
+/// `requeue_clips_with_short_shots` does the actual repair.
+pub fn find_clips_with_short_shots(conn: &Connection, min_duration_sec: f64) -> rusqlite::Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT clip_id FROM shots WHERE (end_tc - start_tc) < ?1 ORDER BY clip_id ASC",
+    )?;
+    let rows = stmt.query_map(params![min_duration_sec], |r| r.get(0))?;
+    rows.collect()
+}
+
+/// Wipes every shot (and cascading tags/embeddings, both `ON DELETE
+/// CASCADE` from `shots`) belonging to each clip in `clip_ids`, clears any
+/// stale gap-fill job for that clip, and queues a fresh one -- the same
+/// "wipe so the pipeline treats it as needing analysis again" pattern
+/// `reset_watched_root` uses for the `TAGS_PROMPT` prompt-echo bug, but
+/// scoped to individual clips instead of a whole watched root, since a
+/// short-shot clip can be sitting in an otherwise-healthy folder alongside
+/// clips that never had the problem. One transaction for the whole batch
+/// so a mid-run failure can't leave some clips wiped without a fresh job
+/// queued behind them. `clip_id`s already `DELETE FROM gap_fill_jobs`
+/// first rather than relying on `enqueue_gap_fill_job_for_clip`'s dedup
+/// guard, since a clip whose short-shot job already ran to `done` would
+/// otherwise never get a new one queued. Returns which clips were touched
+/// so the caller (Tauri layer) can also delete their now-stale cached
+/// keyframe directories -- see `ShotReanalysisResult`'s doc comment.
+pub fn requeue_clips_with_short_shots(
+    conn: &Connection,
+    clip_ids: &[i64],
+) -> rusqlite::Result<ShotReanalysisResult> {
+    if clip_ids.is_empty() {
+        return Ok(ShotReanalysisResult::default());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    for &clip_id in clip_ids {
+        tx.execute("DELETE FROM shots WHERE clip_id = ?1", params![clip_id])?;
+        tx.execute("DELETE FROM gap_fill_jobs WHERE clip_id = ?1", params![clip_id])?;
+        tx.execute("INSERT INTO gap_fill_jobs (clip_id) VALUES (?1)", params![clip_id])?;
+    }
+    tx.commit()?;
+
+    Ok(ShotReanalysisResult {
+        clips_requeued: clip_ids.len(),
+        requeued_clip_ids: clip_ids.to_vec(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Alias links (Finder-alias redirection recorded during a scan, so the
+// folder tree/folder_path filter can browse an aliased subtree without
+// needing its volume mounted or its watched root's path to relate to it)
+// ---------------------------------------------------------------------------
+
+/// Records (or updates, if the alias was re-scanned and now points
+/// somewhere new) one Finder-alias boundary crossing. Called once per
+/// resolved directory alias by `scanner::scan_and_register` -- see
+/// `scanner::AliasLink`.
+pub fn upsert_alias_link(conn: &Connection, apparent_path: &str, real_path: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO alias_links (apparent_path, real_path, updated_at)
+         VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         ON CONFLICT(apparent_path) DO UPDATE SET
+             real_path = excluded.real_path,
+             updated_at = excluded.updated_at",
+        params![apparent_path, real_path],
+    )?;
+    Ok(())
+}
+
+/// Every recorded alias boundary crossing. Small table (one row per
+/// Finder alias ever resolved by a scan, not per file), so `folders`'s
+/// translation helpers just load all of it and match in Rust rather than
+/// fighting SQL `LIKE`'s wildcard characters showing up literally inside
+/// a real folder name.
+pub fn list_alias_links(conn: &Connection) -> rusqlite::Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare("SELECT apparent_path, real_path FROM alias_links")?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+    rows.collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1278,6 +1373,102 @@ mod tests {
         assert_eq!(shots_left, 0, "shots must cascade-delete with their clip");
         assert_eq!(tags_left, 0, "tags must cascade-delete with their shot");
         assert_eq!(jobs_left, 0, "gap-fill jobs must cascade-delete with their clip");
+
+        drop(conn);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn find_clips_with_short_shots_only_returns_clips_with_at_least_one_short_shot() {
+        let (db, path) = open_scratch_db("find_short_shots");
+        let conn = db.conn.lock().unwrap();
+
+        let short = upsert_clip(&conn, &new_clip("/Volumes/Archive/short.mov")).unwrap();
+        conn.execute(
+            "INSERT INTO shots (clip_id, start_tc, end_tc) VALUES (?1, 0.0, 5.0)",
+            params![short.id],
+        )
+        .unwrap();
+        conn.execute(
+            // A 0.3s sliver -- under the 1.0s threshold below.
+            "INSERT INTO shots (clip_id, start_tc, end_tc) VALUES (?1, 5.0, 5.3)",
+            params![short.id],
+        )
+        .unwrap();
+
+        let healthy = upsert_clip(&conn, &new_clip("/Volumes/Archive/healthy.mov")).unwrap();
+        conn.execute(
+            "INSERT INTO shots (clip_id, start_tc, end_tc) VALUES (?1, 0.0, 5.0)",
+            params![healthy.id],
+        )
+        .unwrap();
+
+        let no_shots_yet = upsert_clip(&conn, &new_clip("/Volumes/Archive/pending.mov")).unwrap();
+        let _ = no_shots_yet;
+
+        let flagged = find_clips_with_short_shots(&conn, 1.0).unwrap();
+        assert_eq!(flagged, vec![short.id]);
+
+        drop(conn);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn requeue_clips_with_short_shots_wipes_shots_and_queues_a_fresh_job() {
+        let (db, path) = open_scratch_db("requeue_short_shots");
+        let conn = db.conn.lock().unwrap();
+
+        let clip = upsert_clip(&conn, &new_clip("/Volumes/Archive/short.mov")).unwrap();
+        conn.execute(
+            "INSERT INTO shots (clip_id, start_tc, end_tc) VALUES (?1, 0.0, 0.3)",
+            params![clip.id],
+        )
+        .unwrap();
+        let shot_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tags (shot_id, label, source) VALUES (?1, 'mascot', 'spyglass_vlm')",
+            params![shot_id],
+        )
+        .unwrap();
+        // A prior job that already ran to completion -- must be cleared so
+        // a fresh one gets queued rather than being silently skipped by
+        // `enqueue_gap_fill_job_for_clip`'s "already tracked" dedup guard.
+        conn.execute("INSERT INTO gap_fill_jobs (clip_id) VALUES (?1)", params![clip.id]).unwrap();
+        conn.execute(
+            "UPDATE gap_fill_jobs SET status = 'done' WHERE clip_id = ?1",
+            params![clip.id],
+        )
+        .unwrap();
+
+        let result = requeue_clips_with_short_shots(&conn, &[clip.id]).unwrap();
+        assert_eq!(result.clips_requeued, 1);
+        assert_eq!(result.requeued_clip_ids, vec![clip.id]);
+
+        let shots_left: i64 = conn.query_row("SELECT COUNT(*) FROM shots", [], |r| r.get(0)).unwrap();
+        let tags_left: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0)).unwrap();
+        assert_eq!(shots_left, 0, "the short shot must be wiped");
+        assert_eq!(tags_left, 0, "tags must cascade-delete with their shot");
+
+        let jobs: Vec<String> = conn
+            .prepare("SELECT status FROM gap_fill_jobs WHERE clip_id = ?1")
+            .unwrap()
+            .query_map(params![clip.id], |r| r.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(jobs, vec!["pending".to_string()], "exactly one fresh pending job, not the stale done one");
+
+        drop(conn);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn requeue_clips_with_short_shots_is_a_no_op_for_an_empty_list() {
+        let (db, path) = open_scratch_db("requeue_short_shots_empty");
+        let conn = db.conn.lock().unwrap();
+
+        let result = requeue_clips_with_short_shots(&conn, &[]).unwrap();
+        assert_eq!(result, ShotReanalysisResult::default());
 
         drop(conn);
         std::fs::remove_file(&path).ok();

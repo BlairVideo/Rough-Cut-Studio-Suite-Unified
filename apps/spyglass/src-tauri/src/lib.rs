@@ -118,6 +118,8 @@ pub fn run() {
             commands::check_index_integrity,
             commands::rebuild_search_index_cmd,
             commands::purge_bad_tags,
+            commands::requeue_short_shot_clips,
+            commands::prefetch_clip_file,
             native_video_preview::open_native_video_preview,
             native_video_preview::close_native_video_preview,
         ])

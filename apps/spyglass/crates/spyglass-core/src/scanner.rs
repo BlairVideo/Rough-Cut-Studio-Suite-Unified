@@ -89,15 +89,41 @@ fn resolve_finder_alias(path: &Path) -> Option<PathBuf> {
          end tell"
     );
 
-    let mut child = Command::new("osascript")
+    let mut child = match Command::new("osascript")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
-        .ok()?;
-    child.stdin.take()?.write_all(script.as_bytes()).ok()?;
-    let output = child.wait_with_output().ok()?;
+    {
+        Ok(child) => child,
+        Err(e) => {
+            eprintln!("spyglass: failed to spawn osascript to resolve Finder alias {path_str}: {e}");
+            return None;
+        }
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(script.as_bytes());
+    }
+    let output = match child.wait_with_output() {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("spyglass: failed to read osascript output resolving Finder alias {path_str}: {e}");
+            return None;
+        }
+    };
     if !output.status.success() {
+        // The likely real-world case: macOS hasn't granted Spyglass
+        // Automation permission to control Finder (System Settings ->
+        // Privacy & Security -> Automation), or the usage-description key
+        // that gates the permission prompt is missing from the app's
+        // Info.plist. Either way this fails silently to the user with no
+        // OS-level error dialog, so surface it here -- without this the
+        // alias is just invisible to the scanner with no clue why.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!(
+            "spyglass: osascript could not resolve Finder alias {path_str} (likely missing Automation permission for Finder): {}",
+            stderr.trim()
+        );
         return None;
     }
 
@@ -161,21 +187,54 @@ pub fn is_under_a_removed_root(path: &str, removed_roots: &[String]) -> bool {
 /// finishes, through `discover_media_files_into`'s `visited` set (keyed on
 /// canonicalized real paths) guarding against an alias cycle the way
 /// walkdir's own `same_file` check guards symlinks.
-pub fn discover_media_files(root: &Path, extensions: &[String]) -> Vec<PathBuf> {
+///
+/// A directory alias's own path (as encountered under `root`) is recorded
+/// as an `AliasLink` alongside its resolved target -- the folder tree and
+/// `folder_path` search filter (`crate::folders`) both derive "what's
+/// under this watched root" purely from `clips.file_path` string prefixes,
+/// which breaks the moment a Finder alias redirects part of the tree to a
+/// real location with no path relationship to where the alias sits (e.g.
+/// a different volume entirely). Without recording that redirection here,
+/// at the exact point it's resolved, that subtree's clips would be
+/// indexed and searchable but permanently unreachable from either
+/// feature. A file-target alias isn't recorded -- it registers directly
+/// as a clip under its already-resolved real path and has no folder
+/// subtree of its own to redirect browsing into.
+pub fn discover_media_files(root: &Path, extensions: &[String]) -> (Vec<PathBuf>, Vec<AliasLink>) {
     let mut visited = HashSet::new();
     let mut out = Vec::new();
-    discover_media_files_into(root, extensions, &mut visited, &mut out);
-    out
+    let mut alias_links = Vec::new();
+    discover_media_files_into(root, extensions, &mut visited, &mut out, &mut alias_links);
+    (out, alias_links)
 }
 
-fn discover_media_files_into(root: &Path, extensions: &[String], visited: &mut HashSet<PathBuf>, out: &mut Vec<PathBuf>) {
+/// One Finder-alias boundary crossing found during a scan: `apparent_path`
+/// is the alias's own path (as encountered under a watched root, or under
+/// another alias's already-resolved target, for a nested/chained alias);
+/// `real_path` is where it actually resolves. Persisted via
+/// `db::upsert_alias_link` so `folders`'s tree/filter translation helpers
+/// can turn an apparent browse/filter path into the real path prefix its
+/// clips are actually registered under.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AliasLink {
+    pub apparent_path: PathBuf,
+    pub real_path: PathBuf,
+}
+
+fn discover_media_files_into(
+    root: &Path,
+    extensions: &[String],
+    visited: &mut HashSet<PathBuf>,
+    out: &mut Vec<PathBuf>,
+    alias_links: &mut Vec<AliasLink>,
+) {
     if let Ok(real) = std::fs::canonicalize(root) {
         if !visited.insert(real) {
             return;
         }
     }
 
-    let mut alias_targets: Vec<PathBuf> = Vec::new();
+    let mut alias_targets: Vec<AliasLink> = Vec::new();
     let mut alias_file_targets: Vec<PathBuf> = Vec::new();
 
     let files = WalkDir::new(root)
@@ -205,7 +264,7 @@ fn discover_media_files_into(root: &Path, extensions: &[String], visited: &mut H
             // alias's own name.
             if let Some(target) = resolve_finder_alias(e.path()) {
                 if target.is_dir() {
-                    alias_targets.push(target);
+                    alias_targets.push(AliasLink { apparent_path: e.path().to_path_buf(), real_path: target });
                 } else if has_allowed_extension(&target, extensions) {
                     alias_file_targets.push(target);
                 }
@@ -218,8 +277,9 @@ fn discover_media_files_into(root: &Path, extensions: &[String], visited: &mut H
     out.extend(files);
     out.extend(alias_file_targets);
 
-    for target in alias_targets {
-        discover_media_files_into(&target, extensions, visited, out);
+    for link in alias_targets {
+        discover_media_files_into(&link.real_path, extensions, visited, out, alias_links);
+        alias_links.push(link);
     }
 }
 
@@ -306,8 +366,21 @@ pub fn scan_and_register(db: &Db, root_path: &Path, extensions: &[String]) -> ru
         )
     };
 
+    let (discovered_files, alias_links) = discover_media_files(root_path, extensions);
+
+    if !alias_links.is_empty() {
+        let conn = db.conn.lock().unwrap();
+        for link in &alias_links {
+            db::upsert_alias_link(
+                &conn,
+                &link.apparent_path.to_string_lossy(),
+                &link.real_path.to_string_lossy(),
+            )?;
+        }
+    }
+
     let mut stats = ScanStats::default();
-    for path in discover_media_files(root_path, extensions) {
+    for path in discovered_files {
         stats.discovered += 1;
         let path_str = path.to_string_lossy().into_owned();
 
@@ -437,12 +510,13 @@ mod tests {
         std::fs::write(dir.join("Fall2025").join("clip2.mp4"), b"data").unwrap();
 
         let extensions = default_extensions_owned();
-        let found = discover_media_files(&dir, &extensions);
+        let (found, alias_links) = discover_media_files(&dir, &extensions);
         let names: Vec<String> = found
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
 
+        assert!(alias_links.is_empty(), "no Finder aliases involved in this fixture");
         assert!(names.contains(&"clip1.mov".to_string()));
         assert!(names.contains(&"clip2.mp4".to_string()));
         assert!(!names.contains(&"notes.txt".to_string()));
@@ -467,12 +541,13 @@ mod tests {
         std::os::unix::fs::symlink(&outside, dir.join("link_to_outside")).unwrap();
 
         let extensions = default_extensions_owned();
-        let found = discover_media_files(&dir, &extensions);
+        let (found, alias_links) = discover_media_files(&dir, &extensions);
         let names: Vec<String> = found
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
 
+        assert!(alias_links.is_empty(), "a symlink is not a Finder alias -- no AliasLink recorded for it");
         assert!(names.contains(&"direct_clip.mov".to_string()));
         assert!(
             names.contains(&"linked_clip.mov".to_string()),
@@ -541,7 +616,7 @@ mod tests {
         }
 
         let extensions = default_extensions_owned();
-        let found = discover_media_files(&dir, &extensions);
+        let (found, alias_links) = discover_media_files(&dir, &extensions);
         let names: Vec<String> = found
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
@@ -551,6 +626,22 @@ mod tests {
         assert!(
             names.contains(&"linked_clip.mov".to_string()),
             "a file reachable only through a real Finder alias to a folder must still be discovered"
+        );
+
+        // The folder-tree/folder_path-filter half of the Athletics bug:
+        // without this, the alias's contents are discovered and indexed
+        // but permanently unreachable from either feature, since both
+        // derive "what's under this watched root" from clips.file_path
+        // string prefixes alone, which the alias's cross-volume target
+        // shares none of with `dir`.
+        assert_eq!(alias_links.len(), 1);
+        assert!(
+            alias_links[0].apparent_path.starts_with(&dir),
+            "the alias's own path is inside the watched root, not its resolved target"
+        );
+        assert_eq!(
+            std::fs::canonicalize(&alias_links[0].real_path).unwrap(),
+            std::fs::canonicalize(&outside).unwrap(),
         );
 
         std::fs::remove_dir_all(&dir).ok();

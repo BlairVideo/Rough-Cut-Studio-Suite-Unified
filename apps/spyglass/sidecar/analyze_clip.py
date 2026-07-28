@@ -69,6 +69,19 @@ from parent_watchdog import exit_if_parent_dies
 KEYFRAME_MAX_DIM = 480
 KEYFRAME_JPEG_QUALITY = 82
 
+# ContentDetector's own default min_scene_len is 15 frames (~0.5s @30fps),
+# short enough that fast pans, camera flashes, and quick highlight-reel
+# cuts in real event footage routinely register as their own "shots" --
+# confirmed live: sports/assembly footage indexed dozens of sub-second
+# shots per clip, each paying the full per-shot cost (keyframe + CLIP
+# embedding + VLM caption) for a span too brief to ever be a useful search
+# result or export unit. Passed to ContentDetector as `min_scene_len`
+# below (it accepts seconds as a float, not just frames) so the detector
+# itself absorbs most of these; `_merge_short_scenes` is the backstop for
+# whatever still slips through -- e.g. a trailing scene the detector can't
+# extend past the video's actual end.
+MIN_SHOT_DURATION_SEC = 1.0
+
 # Fast, widely-cached CLIP checkpoint -- same library B-Roll Analyzer
 # already uses locally for its energy scoring (open_clip_torch, openai
 # weights), so this doesn't introduce a new download source. The
@@ -471,10 +484,36 @@ def caption_and_tag(image: Image.Image) -> tuple[str | None, list[str], list[flo
         return None, [], None, None
 
 
+def _merge_short_scenes(scenes: list[tuple[float, float]], min_duration: float) -> list[tuple[float, float]]:
+    """Folds any scene shorter than `min_duration` into a neighbor instead
+    of dropping it, so the result still covers the same total span with no
+    gaps -- a dropped short scene would otherwise leave a hole in the
+    clip's shot coverage that gap-fill never revisits."""
+    if len(scenes) <= 1:
+        return list(scenes)
+
+    merged = [list(scenes[0])]
+    for start, end in scenes[1:]:
+        if merged[-1][1] - merged[-1][0] < min_duration:
+            # Previous scene is still too short -- absorb this one into it
+            # (cascades further on the next iteration if it's still short).
+            merged[-1][1] = end
+        else:
+            merged.append([start, end])
+
+    if len(merged) > 1 and merged[-1][1] - merged[-1][0] < min_duration:
+        # Nothing after the last scene to absorb into -- fold it backward
+        # into its predecessor instead of leaving a stray sliver.
+        last = merged.pop()
+        merged[-1][1] = last[1]
+
+    return [(start, end) for start, end in merged]
+
+
 def _detect_scenes(video_path: str):
     video = open_video(video_path)
     scene_manager = SceneManager()
-    scene_manager.add_detector(ContentDetector())
+    scene_manager.add_detector(ContentDetector(min_scene_len=MIN_SHOT_DURATION_SEC))
     scene_manager.detect_scenes(video=video)
     scene_list = scene_manager.get_scene_list()
     duration_sec = video.duration.seconds
@@ -485,7 +524,8 @@ def _detect_scenes(video_path: str):
         # synthesize that single shot ourselves.
         return duration_sec, [(0.0, duration_sec)]
 
-    return duration_sec, [(start.seconds, end.seconds) for start, end in scene_list]
+    shots = [(start.seconds, end.seconds) for start, end in scene_list]
+    return duration_sec, _merge_short_scenes(shots, MIN_SHOT_DURATION_SEC)
 
 
 def _grab_frame_at(cap: cv2.VideoCapture, time_sec: float) -> np.ndarray | None:

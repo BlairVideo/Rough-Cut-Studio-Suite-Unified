@@ -15,6 +15,7 @@ from analyze_clip import (
     _extract_onscreen_tokens,
     _looks_like_onscreen_text,
     _matches_onscreen_tokens,
+    _merge_short_scenes,
     _parse_tags,
     _resize_to_max_dim,
     _strip_generic_caption_tail,
@@ -284,6 +285,41 @@ class ResizeToMaxDimTests(unittest.TestCase):
         frame = np.zeros((100, 200, 3), dtype=np.uint8)
         resized = _resize_to_max_dim(frame, 240)
         self.assertEqual(resized.shape, frame.shape)
+
+
+class MergeShortScenesTests(unittest.TestCase):
+    def test_leaves_scenes_alone_when_all_meet_the_minimum(self):
+        scenes = [(0.0, 2.0), (2.0, 5.0), (5.0, 10.0)]
+        self.assertEqual(_merge_short_scenes(scenes, 1.0), scenes)
+
+    def test_merges_a_short_scene_forward_into_its_successor(self):
+        # [2.0, 2.3) is a 0.3s sliver -- too short to be a useful shot on
+        # its own -- so it should fold into the scene that follows it.
+        scenes = [(0.0, 2.0), (2.0, 2.3), (2.3, 10.0)]
+        self.assertEqual(_merge_short_scenes(scenes, 1.0), [(0.0, 2.0), (2.0, 10.0)])
+
+    def test_cascades_through_a_run_of_consecutive_short_scenes(self):
+        scenes = [(0.0, 0.3), (0.3, 0.6), (0.6, 5.0), (5.0, 5.2)]
+        # The leading pair of slivers should cascade-merge into the long
+        # scene that follows; the short trailing scene has nothing after
+        # it, so it folds backward into its predecessor instead.
+        self.assertEqual(_merge_short_scenes(scenes, 1.0), [(0.0, 5.2)])
+
+    def test_folds_a_short_trailing_scene_back_into_its_predecessor(self):
+        scenes = [(0.0, 5.0), (5.0, 5.3), (5.3, 10.0)]
+        self.assertEqual(_merge_short_scenes(scenes, 1.0), [(0.0, 5.0), (5.0, 10.0)])
+
+    def test_never_drops_or_gaps_total_coverage(self):
+        scenes = [(0.0, 0.4), (0.4, 0.9), (0.9, 1.2), (1.2, 1.5), (1.5, 20.0)]
+        merged = _merge_short_scenes(scenes, 1.0)
+        self.assertEqual(merged[0][0], scenes[0][0])
+        self.assertEqual(merged[-1][1], scenes[-1][1])
+        for (_, prev_end), (next_start, _) in zip(merged, merged[1:]):
+            self.assertEqual(prev_end, next_start)
+
+    def test_single_scene_or_empty_list_passes_through_unchanged(self):
+        self.assertEqual(_merge_short_scenes([], 1.0), [])
+        self.assertEqual(_merge_short_scenes([(0.0, 0.2)], 1.0), [(0.0, 0.2)])
 
 
 if __name__ == "__main__":

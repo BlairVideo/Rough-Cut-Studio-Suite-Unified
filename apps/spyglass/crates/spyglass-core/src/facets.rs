@@ -188,14 +188,28 @@ pub fn matching_shot_ids(conn: &Connection, filters: &FacetFilters) -> rusqlite:
     }
 
     if let Some(folder_path) = &filters.folder_path {
-        let prefix = crate::folders::normalize_prefix(folder_path);
-        let mut stmt = conn.prepare(
-            "SELECT s.id FROM shots s JOIN clips c ON c.id = s.clip_id
-             WHERE c.file_path = ?1 OR c.file_path LIKE ?2",
-        )?;
-        let ids: HashSet<i64> = stmt
-            .query_map(params![folder_path, format!("{prefix}%")], |r| r.get::<_, i64>(0))?
-            .collect::<Result<_, _>>()?;
+        // `folder_path` is an apparent path (a watched root's own path, or
+        // a folder-tree node's path handed back by `folders::
+        // list_folder_children`) and matches "anywhere under this folder"
+        // (same recursive semantics as `FolderNode::shot_count`) -- so
+        // this needs every real prefix reachable from it, not just a
+        // single translated one, or a folder reached through a Finder
+        // alias (see `folders::real_prefixes_for`) would show a nonzero
+        // count in the tree yet filter down to zero results here, and a
+        // folder merely *containing* an aliased subfolder further down
+        // would silently drop that subfolder's shots from its own total.
+        let mut ids: HashSet<i64> = HashSet::new();
+        for real_path in crate::folders::real_prefixes_for(conn, folder_path)? {
+            let prefix = crate::folders::normalize_prefix(&real_path);
+            let mut stmt = conn.prepare(
+                "SELECT s.id FROM shots s JOIN clips c ON c.id = s.clip_id
+                 WHERE c.file_path = ?1 OR c.file_path LIKE ?2",
+            )?;
+            let found: HashSet<i64> = stmt
+                .query_map(params![real_path, format!("{prefix}%")], |r| r.get::<_, i64>(0))?
+                .collect::<Result<_, _>>()?;
+            ids.extend(found);
+        }
         intersect(ids);
     }
 
@@ -408,6 +422,29 @@ mod tests {
         assert!(allowed.contains(&nested_shot), "subfolders of the selected folder must match too");
         assert!(!allowed.contains(&sibling_shot));
         assert!(!allowed.contains(&collision_shot), "a same-prefix sibling root must not false-match");
+
+        drop(conn);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn folder_path_filter_matches_through_a_finder_alias_to_a_different_volume() {
+        // The other half of the Athletics bug: `folders::list_folder_children`
+        // now surfaces an aliased folder as a node, but selecting it has to
+        // actually filter down to its clips too, even though they live on
+        // a volume with no path relationship to the watched root at all.
+        let (db, path) = open_scratch_db("folder_path_alias");
+        let conn = db.conn.lock().unwrap();
+        crate::db::upsert_alias_link(&conn, "/Volumes/Root/Athletics", "/Volumes/OtherDrive/Athletics").unwrap();
+        let aliased_clip = insert_clip(&conn, "/Volumes/OtherDrive/Athletics/Fall/game.mov", SourceApp::SpyglassScan);
+        let sibling_clip = insert_clip(&conn, "/Volumes/Root/Academics/lecture.mov", SourceApp::SpyglassScan);
+        let aliased_shot = insert_shot(&conn, aliased_clip, 0.0, 4.0);
+        let sibling_shot = insert_shot(&conn, sibling_clip, 0.0, 4.0);
+
+        let filters = FacetFilters { folder_path: Some("/Volumes/Root/Athletics".into()), ..Default::default() };
+        let allowed = matching_shot_ids(&conn, &filters).unwrap().unwrap();
+        assert!(allowed.contains(&aliased_shot), "the apparent folder_path must resolve through the alias link");
+        assert!(!allowed.contains(&sibling_shot));
 
         drop(conn);
         std::fs::remove_file(&path).ok();

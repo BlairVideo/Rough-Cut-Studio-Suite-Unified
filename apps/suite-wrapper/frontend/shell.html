@@ -482,9 +482,9 @@
       <div class="suite-block">
         <h3 class="suite-block-title">Send Pool</h3>
         <div class="suite-folder-row suite-folder-row--wrap">
-          <button class="suite-btn suite-btn--secondary" id="sgSendBroll">Send to B-Roll Analyzer</button>
-          <button class="suite-btn suite-btn--secondary" id="sgSendEditBroll">Send to Rough Cut Studio</button>
-          <button class="suite-btn suite-btn--secondary" id="sgSendColorize">Send to Colorize</button>
+          <button class="suite-btn suite-btn--secondary" id="sgSendBroll">B-Roll</button>
+          <button class="suite-btn suite-btn--secondary" id="sgSendEditBroll">Edit</button>
+          <button class="suite-btn suite-btn--secondary" id="sgSendColorize">Grade</button>
         </div>
       </div>
 
@@ -1009,6 +1009,13 @@
             <p class="suite-hint suite-hint--tight">Removes existing auto-generated tags that came from reading on-screen text (jersey numbers, scoreboard scores/clocks, years off a sign) instead of describing the shot itself. Doesn't touch tags you added yourself, and doesn't catch a name or other on-screen text with no digits in it.</p>
             <button class="suite-btn suite-btn--ghost" id="sgPurgeOnscreenTextTags">Purge on-screen text tags</button>
             <div class="suite-hint suite-hint--tight" id="sgPurgeOnscreenTextTagsResult"></div>
+          </div>
+
+          <div class="suite-block">
+            <h3 class="suite-block-title">Shot Maintenance</h3>
+            <p class="suite-hint suite-hint--tight">Re-indexes any clip with a very short shot fragment (under a second, from fast pans, camera flashes, or quick cuts the scene detector used to over-split before its sensitivity was fixed). Only affected clips are wiped and requeued — everything else in the index is left alone.</p>
+            <button class="suite-btn suite-btn--ghost" id="sgRequeueShortShots">Re-index short fragments</button>
+            <div class="suite-hint suite-hint--tight" id="sgRequeueShortShotsResult"></div>
           </div>
         </div>
 

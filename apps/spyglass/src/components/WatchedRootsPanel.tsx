@@ -82,6 +82,7 @@ function MaintenanceSection() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmingRebuild, setConfirmingRebuild] = useState(false);
   const [confirmingPurgeTags, setConfirmingPurgeTags] = useState(false);
+  const [confirmingRequeueShortShots, setConfirmingRequeueShortShots] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
   const refreshBackups = async () => {
@@ -158,6 +159,31 @@ function MaintenanceSection() {
     } finally {
       setBusyAction(null);
       setConfirmingPurgeTags(false);
+    }
+  };
+
+  // Retroactive repair for clips indexed before the scene-cut detector's
+  // sensitivity fix (sidecar/analyze_clip.py's `min_scene_len` +
+  // `_merge_short_scenes`) -- wipes and requeues just the clips that have
+  // at least one shot under MIN_SHOT_DURATION_SEC (fast pans, camera
+  // flashes, quick highlight-reel cuts that used to register as their own
+  // spurious sub-second "shots"). The actual re-analysis then runs
+  // asynchronously through the normal gap-fill queue, same as any newly
+  // scanned clip.
+  const requeueShortShotClips = async () => {
+    setBusyAction("requeueShortShots");
+    try {
+      const requeued = await api.requeueShortShotClips();
+      setStatusMessage(
+        requeued === 0
+          ? "No clips with short fragments found."
+          : `Requeued ${requeued} clip${requeued === 1 ? "" : "s"} with short fragments for re-analysis.`,
+      );
+    } catch (err) {
+      setStatusMessage(`Re-index failed: ${String(err)}`);
+    } finally {
+      setBusyAction(null);
+      setConfirmingRequeueShortShots(false);
     }
   };
 
@@ -249,6 +275,39 @@ function MaintenanceSection() {
             className="rounded border border-border-subtle px-2 py-1 text-xs text-white hover:border-athletic-blue-light disabled:opacity-40"
           >
             Purge on-screen text tags
+          </button>
+        )}
+        {confirmingRequeueShortShots ? (
+          <>
+            <span className="text-xs text-warm-grey">
+              Re-index every clip that has a very short shot fragment (under a second, from fast pans, camera
+              flashes, or quick cuts the old scene detector over-split)? Only affected clips are wiped and
+              requeued -- everything else in the index is left alone.
+            </span>
+            <button
+              type="button"
+              onClick={() => void requeueShortShotClips()}
+              disabled={busyAction !== null}
+              className="rounded bg-athletic-blue px-2 py-1 text-xs text-white hover:bg-athletic-blue-light"
+            >
+              {busyAction === "requeueShortShots" ? "Requeuing..." : "Confirm"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingRequeueShortShots(false)}
+              className="rounded border border-border-subtle px-2 py-1 text-xs text-white"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmingRequeueShortShots(true)}
+            disabled={busyAction !== null}
+            className="rounded border border-border-subtle px-2 py-1 text-xs text-white hover:border-athletic-blue-light disabled:opacity-40"
+          >
+            Re-index short fragments
           </button>
         )}
       </div>

@@ -478,6 +478,38 @@ fn reset_watched_root(id: i64) -> PyResult<usize> {
     Ok(result.clips_removed)
 }
 
+/// Retroactive repair (mirrors `commands::requeue_short_shot_clips`) for
+/// clips indexed before `sidecar/analyze_clip.py`'s scene-cut detector
+/// sensitivity fix: finds every clip with at least one shot shorter than
+/// `spyglass_core::db::MIN_SHOT_DURATION_SEC` (fast pans, camera flashes,
+/// and quick highlight-reel cuts used to register as their own spurious
+/// sub-second "shots"), wipes just those clips' shots/tags/embeddings, and
+/// requeues them for a fresh gap-fill pass -- clips that never had the
+/// problem are left untouched, unlike `reset_watched_root`'s whole-folder
+/// wipe. Also deletes each affected clip's cached keyframe directory,
+/// since re-analysis producing fewer (merged) shots than before would
+/// otherwise leave the old higher-numbered keyframe JPEGs behind as
+/// orphaned files. Destructive -- the caller is responsible for
+/// confirming with the user before calling this. Returns the number of
+/// clips requeued; the actual re-analysis happens asynchronously via the
+/// normal gap-fill worker queue.
+#[pyfunction]
+fn requeue_short_shot_clips() -> PyResult<usize> {
+    let state = state()?;
+    let result = {
+        let conn = state.db.conn.lock().map_err(to_py_err)?;
+        let clip_ids = ::spyglass_core::db::find_clips_with_short_shots(&conn, ::spyglass_core::db::MIN_SHOT_DURATION_SEC)
+            .map_err(to_py_err)?;
+        ::spyglass_core::db::requeue_clips_with_short_shots(&conn, &clip_ids).map_err(to_py_err)?
+    };
+    if let Some(keyframe_root) = state.db.path.parent().map(|p| p.join("keyframes")) {
+        for clip_id in &result.requeued_clip_ids {
+            let _ = std::fs::remove_dir_all(keyframe_root.join(clip_id.to_string()));
+        }
+    }
+    Ok(result.clips_requeued)
+}
+
 #[pyfunction]
 fn relink_watched_root(py: Python<'_>, id: i64, new_path: String) -> PyResult<PyObject> {
     if !Path::new(&new_path).is_dir() {
@@ -753,6 +785,7 @@ fn spyglass_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_watched_root_access_level, m)?)?;
     m.add_function(wrap_pyfunction!(remove_watched_root, m)?)?;
     m.add_function(wrap_pyfunction!(reset_watched_root, m)?)?;
+    m.add_function(wrap_pyfunction!(requeue_short_shot_clips, m)?)?;
     m.add_function(wrap_pyfunction!(relink_watched_root, m)?)?;
     m.add_function(wrap_pyfunction!(scan_watched_root, m)?)?;
     m.add_function(wrap_pyfunction!(enqueue_gap_fill, m)?)?;

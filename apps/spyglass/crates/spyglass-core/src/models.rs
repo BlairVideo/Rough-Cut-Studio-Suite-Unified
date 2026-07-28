@@ -227,6 +227,19 @@ pub struct ResetWatchedRootResult {
     pub removed_clip_ids: Vec<i64>,
 }
 
+/// Result of `db::requeue_clips_with_short_shots` -- how many clips had
+/// their shots wiped and requeued for re-analysis, and which ids, so the
+/// caller can also delete each affected clip's cached keyframe directory
+/// (same rationale as `ResetWatchedRootResult`: the keyframe cache is a
+/// filesystem concern this crate doesn't own, and re-analysis producing
+/// fewer shots than before would otherwise leave the old, higher-numbered
+/// keyframe JPEGs behind as orphaned files).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShotReanalysisResult {
+    pub clips_requeued: usize,
+    pub requeued_clip_ids: Vec<i64>,
+}
+
 /// One ranked hit from `search::search_shots` (Section 12) -- a shot plus
 /// enough of its parent clip and gap-fill output to render a result card
 /// and jump to source.

@@ -350,6 +350,29 @@ class SpyglassMixin:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
+    def spyglass_requeue_short_shot_clips(self):
+        """Retroactive repair for clips indexed before sidecar/
+        analyze_clip.py's scene-cut detector sensitivity fix
+        (ContentDetector's min_scene_len + the _merge_short_scenes
+        backstop): finds every clip with at least one shot under
+        MIN_SHOT_DURATION_SEC (fast pans, camera flashes, and quick
+        highlight-reel cuts used to register as their own spurious
+        sub-second "shots," each paying the full keyframe/CLIP-embedding/
+        VLM-caption cost) and wipes + requeues just those clips for a
+        fresh gap-fill pass, deleting their now-stale cached keyframe
+        directories too. Clips that never had the problem are left
+        completely untouched, unlike spyglass_reset_watched_root's whole-
+        folder wipe. Destructive — the frontend is responsible for
+        confirming with the user before calling this. Re-analysis then
+        runs asynchronously through the normal gap-fill queue, same as any
+        newly scanned clip -- no separate rescan trigger needed."""
+        try:
+            requeued = spyglass_bridge.requeue_short_shot_clips()
+            return {"ok": True, "requeued": requeued}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
     def spyglass_relink_watched_root(self, root_id, new_path):
         try:
             if not new_path or not os.path.isdir(new_path):

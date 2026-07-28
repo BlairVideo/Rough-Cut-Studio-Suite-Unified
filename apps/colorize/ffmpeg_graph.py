@@ -35,23 +35,35 @@ DEFAULT_BAKE_SIZE = 33  # ffmpeg's own lut3d comfortably handles up to 65; 33 is
 # libx264/prores_ks software encoding -- every machine this suite runs on
 # is Apple Silicon (see the root CLAUDE.md's Local-First Philosophy and
 # interview-transcriber's own Apple-Silicon-only mlx-whisper dependency),
-# so there's no software-encode fallback to preserve. Benchmarked on a
-# 1080p/20s clip: h264_videotoolbox ran ~2x faster than libx264 -preset
-# slow -crf 18 at a fifth of the CPU load; prores_videotoolbox ran ~4.4x
-# faster than prores_ks. VideoToolbox has no CRF-style rate control, so
-# share_h264's bitrate is picked per-clip by _h264_bitrate_for_height
-# below rather than fixed here -- the suite's footage is almost all 4K,
-# and a bitrate sized for 1080p would band badly upscaled to that, while
-# one sized for 4K would bloat a rare 1080p export for no visual gain.
+# so there's no software-encode-by-default path to preserve. Benchmarked
+# on a 1080p/20s clip: h264_videotoolbox ran ~2x faster than libx264
+# -preset slow -crf 18 at a fifth of the CPU load; prores_videotoolbox
+# ran ~4.4x faster than prores_ks. VideoToolbox has no CRF-style rate
+# control, so share_h264's bitrate is picked per-clip by
+# _h264_bitrate_for_height below rather than fixed here -- the suite's
+# footage is almost all 4K, and a bitrate sized for 1080p would band
+# badly upscaled to that, while one sized for 4K would bloat a rare
+# 1080p export for no visual gain.
+#
+# -allow_sw 1 on both encoders: Apple's hardware AVC encoder tops out at
+# H.264 level 5.2 (4096px-class frame widths) and the hardware session
+# can also simply be busy/unavailable (multiple concurrent VT sessions,
+# another app holding it) -- either way `Cannot create compression
+# session: -12903` is VideoToolbox refusing to open a hardware session,
+# and ffmpeg's own stderr for that error literally suggests this flag.
+# It's a fallback, not a default swap: VT still tries hardware first and
+# only drops to software when hardware init fails, so normal 4K/1080p
+# exports are unaffected -- this only kicks in for the sources (5K+,
+# hardware-contended) that would otherwise hard-fail the export.
 OUTPUT_PRESETS = {
     "share_h264": {
         "container": "mp4",
-        "video_args": ["-c:v", "h264_videotoolbox", "-b:v", "12M", "-pix_fmt", "yuv420p"],
+        "video_args": ["-c:v", "h264_videotoolbox", "-allow_sw", "1", "-b:v", "12M", "-pix_fmt", "yuv420p"],
         "audio_args": ["-c:a", "aac", "-b:a", "192k"],
     },
     "archive_prores422": {
         "container": "mov",
-        "video_args": ["-c:v", "prores_videotoolbox", "-profile:v", "3", "-pix_fmt", "yuv422p10le"],
+        "video_args": ["-c:v", "prores_videotoolbox", "-allow_sw", "1", "-profile:v", "3", "-pix_fmt", "yuv422p10le"],
         "audio_args": ["-c:a", "pcm_s16le"],
     },
 }

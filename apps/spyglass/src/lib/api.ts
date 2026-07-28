@@ -111,6 +111,8 @@ export const api = {
 
   purgeBadTags: () => invoke<number>("purge_bad_tags"),
 
+  requeueShortShotClips: () => invoke<number>("requeue_short_shot_clips"),
+
   /// `rect.y` must already be in AppKit's bottom-left-origin convention
   /// (distance from the bottom of the viewport), not the DOM's top-left --
   /// see the comment in `ShotPreviewPlayer.tsx` for why that conversion
@@ -122,4 +124,10 @@ export const api = {
   ) => invoke<void>("open_native_video_preview", { path, startTc, ...rect }),
 
   closeNativeVideoPreview: () => invoke<void>("close_native_video_preview"),
+
+  /// Fire-and-forget read-ahead -- call on shot hover, well before the
+  /// user actually clicks to preview, so a sleeping external/archival
+  /// drive gets a head start waking up. See `prefetch_clip_file`'s doc
+  /// comment for why this never needs to be awaited or handled.
+  prefetchClipFile: (path: string) => invoke<void>("prefetch_clip_file", { path }),
 };

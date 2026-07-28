@@ -235,6 +235,11 @@ def reset_watched_root(root_id):
     return _spyglass_core.reset_watched_root(int(root_id))
 
 
+def requeue_short_shot_clips():
+    ensure_initialized()
+    return _spyglass_core.requeue_short_shot_clips()
+
+
 def relink_watched_root(root_id, new_path):
     ensure_initialized()
     return _spyglass_core.relink_watched_root(int(root_id), new_path)

@@ -93,6 +93,7 @@
       consolidateDest: "",
       consolidateEstimate: null,
       consolidatePolling: null, // interval id while an export is in flight
+      rootsPolling: null,       // interval id while the watched-roots panel is visible (see updateSpyglassRootsPolling)
       dateFrom: "",            // FacetFilters.date_from, "" means unset
       dateTo: "",               // FacetFilters.date_to, "" means unset
       favoritesOnly: false,     // FacetFilters.favorites_only
@@ -336,6 +337,7 @@
     // which is 0 while the workspace itself is hidden — redraw once it
     // becomes visible so it isn't stuck at a stale/zero width.
     if (name === "spyglass") { loadSpyglassFacets(); loadSpyglassRoots(); loadSpyglassPool(); loadSpyglassFolderTree(); }
+    updateSpyglassRootsPolling();
     if (name === "sync") scheduleSyncWaveformRedraw();
     if (name === "harmonize") scheduleHarmonizeWaveformRedraw();
     if (name !== "broll") stopBrollPreview();
@@ -1703,6 +1705,28 @@
     renderSpyglassRoots();
   }
 
+  // Gap-fill indexing runs continuously in the background (in-process, via
+  // spyglass_core), completely independent of this panel being open --
+  // unlike the Sync/Transcribe/B-Roll/Harmonize job system, it never
+  // notifies the frontend when a clip finishes. Without this, "indexed/
+  // queued" froze at whatever it was the moment the panel was opened,
+  // looking stuck (and inaccurate) even while indexing kept moving
+  // underneath. Polls only while the panel could actually be on screen —
+  // the Search workspace, or the Settings modal's Search tab.
+  function spyglassRootsPanelVisible() {
+    const settingsOpen = !$("suiteSettingsModal").hidden;
+    return S.ws === "spyglass" || (settingsOpen && S.settingsTab === "search");
+  }
+
+  function updateSpyglassRootsPolling() {
+    if (spyglassRootsPanelVisible()) {
+      if (!S.spyglass.rootsPolling) S.spyglass.rootsPolling = setInterval(loadSpyglassRoots, 4000);
+    } else if (S.spyglass.rootsPolling) {
+      clearInterval(S.spyglass.rootsPolling);
+      S.spyglass.rootsPolling = null;
+    }
+  }
+
   function renderSpyglassRoots() {
     const box = $("sgRootsList");
     if (!S.spyglass.roots.length) {
@@ -2455,6 +2479,28 @@
         s.tags = (s.tags || []).filter((t) => !/\d/.test(t) && !t.split(" ").some((w) => SG_GENDER_WORDS.has(w)));
       });
       renderSpyglassResults();
+    });
+
+    // ---- shot maintenance ----
+
+    $("sgRequeueShortShots").addEventListener("click", async () => {
+      if (!confirm("Re-index every clip with a very short shot fragment (under a second, from fast pans, camera flashes, or quick cuts the old scene detector over-split)? Only affected clips are wiped and requeued for re-analysis — everything else in the index is left alone. Re-analysis runs in the background afterward.")) return;
+      const btn = $("sgRequeueShortShots");
+      const resultBox = $("sgRequeueShortShotsResult");
+      btn.disabled = true;
+      const res = await call("spyglass_requeue_short_shot_clips");
+      btn.disabled = false;
+      if (!res.ok) { toast(res.error || "Couldn't requeue those clips.", "error"); return; }
+      resultBox.textContent = res.requeued === 0
+        ? "No clips with short fragments found."
+        : `Requeued ${res.requeued} clip${res.requeued === 1 ? "" : "s"} for re-analysis.`;
+      toast(
+        res.requeued === 0
+          ? "No clips with short fragments found."
+          : `Requeued ${res.requeued} clip${res.requeued === 1 ? "" : "s"} with short fragments.`,
+        "ok",
+      );
+      if (res.requeued > 0) { ensurePolling(); openDrawer(); }
     });
 
     // ---- pool tray ----
@@ -5011,7 +5057,7 @@
     switchSettingsTab(tab || S.settingsTab || "general");
   }
 
-  function closeSuiteSettings() { $("suiteSettingsModal").hidden = true; }
+  function closeSuiteSettings() { $("suiteSettingsModal").hidden = true; updateSpyglassRootsPolling(); }
 
   // Settings panes are static markup (see shell.html), not rebuilt on every
   // open -- the Edit pane hosts a live node relocated out of RCS's own DOM
@@ -5041,6 +5087,7 @@
     } else if (tab === "graphics") {
       refreshBranderGeminiKeyStatus();
     }
+    updateSpyglassRootsPolling();
   }
 
   async function refreshSuiteSettingsCacheInfo() {

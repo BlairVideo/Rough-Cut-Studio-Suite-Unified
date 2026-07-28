@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { api } from "../lib/api";
 import { useAppStore } from "../store/useAppStore";
 import type { ShotSearchResult } from "../types";
 import { ShotPreviewPlayer } from "./ShotPreviewPlayer";
@@ -72,10 +73,19 @@ function TagEditor({ result }: { result: ShotSearchResult }) {
 function ShotPreview({ result, onOpenPlayer }: { result: ShotSearchResult; onOpenPlayer: () => void }) {
   const [hovering, setHovering] = useState(false);
 
+  // Hover reliably precedes an actual click by at least a beat while
+  // browsing results -- a free head start on waking a sleeping external/
+  // archival drive and warming its read cache before open_native_video_
+  // preview needs the file for real. Fire-and-forget: see prefetchClipFile.
+  const prefetch = () => {
+    setHovering(true);
+    void api.prefetchClipFile(result.clip_file_path);
+  };
+
   return (
     <div
       className="relative aspect-video w-full cursor-pointer overflow-hidden bg-surface-inset"
-      onMouseEnter={() => setHovering(true)}
+      onMouseEnter={prefetch}
       onMouseLeave={() => setHovering(false)}
       onClick={onOpenPlayer}
       title="Click to play"
