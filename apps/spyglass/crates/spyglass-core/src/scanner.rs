@@ -6,6 +6,7 @@
 use crate::db::{self, Db};
 use crate::models::{AccessLevel, NewClip, SourceApp, WatchedRoot};
 use chrono::{DateTime, Utc};
+use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -38,6 +39,82 @@ fn has_allowed_extension(path: &Path, extensions: &[String]) -> bool {
         .unwrap_or(false)
 }
 
+/// True if `path` is a Finder alias (the "Make Alias" bookmark-data file,
+/// distinct from a Unix symlink -- `follow_links(true)` on `WalkDir` has no
+/// effect on these, since the file itself is `S_IFREG`, not `S_IFLNK`).
+/// Checked via the `com.apple.FinderInfo` xattr's Finder-flags field
+/// (`kIsAlias`, bit `0x8000` of the big-endian u16 at byte offset 8) rather
+/// than shelling out per file -- a watched root can hold thousands of
+/// ordinary clips, and this needs to run against every one of them, so it
+/// has to be a cheap syscall-level check. Confirmed against a real
+/// Finder-made alias file: its `FinderInfo` xattr is `66 64 72 70 4D 41 43
+/// 53 80 00 ...` -- `80 00` at offset 8 is exactly this flag.
+#[cfg(target_os = "macos")]
+fn is_finder_alias(path: &Path) -> bool {
+    match xattr::get(path, "com.apple.FinderInfo") {
+        Ok(Some(data)) if data.len() >= 10 => u16::from_be_bytes([data[8], data[9]]) & 0x8000 != 0,
+        _ => false,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_finder_alias(_path: &Path) -> bool {
+    false
+}
+
+/// Resolves a confirmed Finder alias to its target, via Finder's own
+/// "original item" -- the same resolution Finder itself uses when you
+/// double-click the alias, so it tracks a moved/renamed target by volume +
+/// inode rather than by whatever stale path was bookmarked at creation
+/// time. There's no public Foundation/CoreFoundation entry point for this
+/// that isn't either deprecated Carbon (`FSResolveAliasFileWithMountFlags`)
+/// or requires ObjC bridging; going through Finder via `osascript` is the
+/// supported, local (no network) mechanism, and it's only invoked for
+/// files `is_finder_alias` already confirmed -- not per ordinary clip.
+/// Coercing the resolved item to `alias` before reading its POSIX path is
+/// required: asking Finder for `POSIX path of (original item of ...)`
+/// directly errors (-1728) when the original item is a folder.
+#[cfg(target_os = "macos")]
+fn resolve_finder_alias(path: &Path) -> Option<PathBuf> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let path_str = path.to_str()?;
+    let escaped = path_str.replace('\\', "\\\\").replace('"', "\\\"");
+    let script = format!(
+        "tell application \"Finder\"\n\
+         set theItem to original item of (POSIX file \"{escaped}\" as alias)\n\
+         set theAlias to theItem as alias\n\
+         return POSIX path of theAlias\n\
+         end tell"
+    );
+
+    let mut child = Command::new("osascript")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    child.stdin.take()?.write_all(script.as_bytes()).ok()?;
+    let output = child.wait_with_output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let text = String::from_utf8(output.stdout).ok()?;
+    let trimmed = text.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resolve_finder_alias(_path: &Path) -> Option<PathBuf> {
+    None
+}
+
 /// True if `path` is the same as, or falls inside, one of `roots`. A real
 /// path-boundary check, not a bare string-prefix test: `/Volumes/Archive`
 /// must not swallow a sibling like `/Volumes/Archive2` just because it
@@ -63,8 +140,46 @@ pub fn is_under_a_removed_root(path: &str, removed_roots: &[String]) -> bool {
 
 /// Walks `root`, skipping hidden/render-proxy subfolders and the known
 /// sidecar filenames, returning every file whose extension is allowlisted.
+///
+/// `follow_links(true)`: a watched root's *own* path is always walked
+/// regardless of this setting (confirmed against walkdir 2.5.0), but a
+/// symlink placed *inside* an already-watched folder -- e.g. a shortcut out
+/// to a second drive without adding it as its own root -- is a separate
+/// entry encountered mid-walk, and without this it's visited as a leaf and
+/// never descended into, silently hiding everything behind it. walkdir's
+/// own cycle detection (via `same_file`) catches a symlink that loops back
+/// to an ancestor directory and yields an `Err` for just that entry rather
+/// than recursing forever, which the `filter_map(|e| e.ok())` below already
+/// drops -- no dedicated loop guard needed for that case.
+///
+/// A **Finder alias** (as opposed to a symlink) is a different animal:
+/// `follow_links` has no effect on it at all, since it's an ordinary
+/// regular file containing bookmark data, not a filesystem-level link --
+/// see `is_finder_alias`/`resolve_finder_alias`. One is handled as its own
+/// pass per directory: confirmed aliases are pulled out of the walk here
+/// and queued in `alias_targets`, then recursed into after the walk
+/// finishes, through `discover_media_files_into`'s `visited` set (keyed on
+/// canonicalized real paths) guarding against an alias cycle the way
+/// walkdir's own `same_file` check guards symlinks.
 pub fn discover_media_files(root: &Path, extensions: &[String]) -> Vec<PathBuf> {
-    WalkDir::new(root)
+    let mut visited = HashSet::new();
+    let mut out = Vec::new();
+    discover_media_files_into(root, extensions, &mut visited, &mut out);
+    out
+}
+
+fn discover_media_files_into(root: &Path, extensions: &[String], visited: &mut HashSet<PathBuf>, out: &mut Vec<PathBuf>) {
+    if let Ok(real) = std::fs::canonicalize(root) {
+        if !visited.insert(real) {
+            return;
+        }
+    }
+
+    let mut alias_targets: Vec<PathBuf> = Vec::new();
+    let mut alias_file_targets: Vec<PathBuf> = Vec::new();
+
+    let files = WalkDir::new(root)
+        .follow_links(true)
         .into_iter()
         .filter_entry(|e| {
             if e.file_type().is_dir() && e.depth() > 0 {
@@ -79,9 +194,33 @@ pub fn discover_media_files(root: &Path, extensions: &[String]) -> Vec<PathBuf> 
             let name = e.file_name().to_string_lossy();
             !is_hidden(&name) && !is_sidecar_file(&name)
         })
+        .filter(|e| {
+            if !is_finder_alias(e.path()) {
+                return true;
+            }
+            // Handled via the alias_targets/recursion path below instead of
+            // the extension-filtered file list -- an alias to a folder has
+            // no extension of its own to match, and an alias to a file
+            // still needs its *target's* extension checked, not the
+            // alias's own name.
+            if let Some(target) = resolve_finder_alias(e.path()) {
+                if target.is_dir() {
+                    alias_targets.push(target);
+                } else if has_allowed_extension(&target, extensions) {
+                    alias_file_targets.push(target);
+                }
+            }
+            false
+        })
         .map(|e| e.into_path())
-        .filter(|p| has_allowed_extension(p, extensions))
-        .collect()
+        .filter(|p| has_allowed_extension(p, extensions));
+
+    out.extend(files);
+    out.extend(alias_file_targets);
+
+    for target in alias_targets {
+        discover_media_files_into(&target, extensions, visited, out);
+    }
 }
 
 /// BLAKE3 checksum, computed by streaming fixed-size chunks rather than
@@ -312,6 +451,110 @@ mod tests {
         assert_eq!(names.len(), 2);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn discover_media_files_follows_a_symlinked_subfolder_inside_the_watched_root() {
+        // The alias/symlink-shortcut case: a watched root contains a Finder
+        // alias or symlink out to a second drive instead of that drive being
+        // added as its own root. The root's own path is walked either way
+        // (walkdir always follows the root argument), so this only exercises
+        // a symlink *encountered during* the walk, one level down.
+        let dir = scratch_dir("symlink_subfolder");
+        std::fs::write(dir.join("direct_clip.mov"), b"data").unwrap();
+        let outside = scratch_dir("symlink_target");
+        std::fs::write(outside.join("linked_clip.mov"), b"data").unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("link_to_outside")).unwrap();
+
+        let extensions = default_extensions_owned();
+        let found = discover_media_files(&dir, &extensions);
+        let names: Vec<String> = found
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert!(names.contains(&"direct_clip.mov".to_string()));
+        assert!(
+            names.contains(&"linked_clip.mov".to_string()),
+            "a file reachable only through a symlinked subfolder must still be discovered"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&outside).ok();
+    }
+
+    /// Creates a real Finder alias (via `osascript`/Finder, the same path
+    /// `make_finder_alias`'s caller would use in production) rather than a
+    /// symlink -- confirming `is_finder_alias`/`resolve_finder_alias` and
+    /// not just walkdir's own `follow_links`. Returns `false` (skip, don't
+    /// fail the test) if `osascript` itself is unavailable/blocked in this
+    /// environment, since that's an environment gap, not a code regression.
+    #[cfg(target_os = "macos")]
+    fn make_finder_alias(target: &Path, alias_container: &Path) -> bool {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let script = format!(
+            "tell application \"Finder\"\n\
+             make new alias file at (POSIX file \"{}\") to (POSIX file \"{}\")\n\
+             end tell",
+            alias_container.to_string_lossy(),
+            target.to_string_lossy(),
+        );
+        let Ok(mut child) = Command::new("osascript")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return false;
+        };
+        let Some(mut stdin) = child.stdin.take() else {
+            return false;
+        };
+        if stdin.write_all(script.as_bytes()).is_err() {
+            return false;
+        }
+        drop(stdin);
+        child.wait().map(|s| s.success()).unwrap_or(false)
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discover_media_files_follows_a_real_finder_alias_to_a_folder() {
+        // The actual Athletics-folder bug report: a *Finder alias*
+        // ("Make Alias"), not a symlink, sitting inside a watched root and
+        // pointing out to a folder on a second drive. Unlike the symlink
+        // case, `WalkDir::follow_links` does nothing for this -- it's an
+        // ordinary regular file containing bookmark data, so this only
+        // passes if `is_finder_alias`/`resolve_finder_alias` actually work.
+        let dir = scratch_dir("finder_alias_subfolder");
+        std::fs::write(dir.join("direct_clip.mov"), b"data").unwrap();
+        let outside = scratch_dir("finder_alias_target");
+        std::fs::write(outside.join("linked_clip.mov"), b"data").unwrap();
+
+        if !make_finder_alias(&outside, &dir) {
+            eprintln!("skipping: osascript/Finder alias creation unavailable in this environment");
+            std::fs::remove_dir_all(&dir).ok();
+            std::fs::remove_dir_all(&outside).ok();
+            return;
+        }
+
+        let extensions = default_extensions_owned();
+        let found = discover_media_files(&dir, &extensions);
+        let names: Vec<String> = found
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert!(names.contains(&"direct_clip.mov".to_string()));
+        assert!(
+            names.contains(&"linked_clip.mov".to_string()),
+            "a file reachable only through a real Finder alias to a folder must still be discovered"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&outside).ok();
     }
 
     #[test]
