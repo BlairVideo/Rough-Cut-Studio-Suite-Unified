@@ -624,7 +624,7 @@
   pointer-events: none;
 }
 .cz-wheel-block input[type="range"] {
-  width: 100%;
+  width: 50%;
   accent-color: var(--teal);
 }
 
