@@ -694,10 +694,14 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
 
         if scene.get("logo_grow"):
             # Subtle, slow scale-up that keeps easing from 1.0x to a
-            # modest +8% for as long as the logo is on screen — the
-            # WHOLE clip including the hold tail, not just until t
-            # reaches 1.0 (see elapsed_seconds' docstring on render_frame
-            # for why t alone can't express that). Applied BEFORE
+            # modest +8% across the ENTIRE clip, starting at 0:00 (not
+            # gated on the logo's own entrance timing) through the hold
+            # tail (see elapsed_seconds' docstring on render_frame for
+            # why t alone can't express animating through the hold tail).
+            # The logo itself may still be invisible (logo_alpha == 0)
+            # for part of that window — it's just already mid-grow by
+            # the time it fades/slides in, rather than popping in at
+            # 1.0x and only starting to grow afterward. Applied BEFORE
             # lw/lh/positions are computed below so the logo grows
             # outward from whichever point its placement already anchors
             # (its own center for a "-center"/"center" placement, the
@@ -708,11 +712,10 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
                 # t, e.g. render_still's single settled snapshot) — fall
                 # back to the old t-only behavior: growth confined to the
                 # pre-hold window, capped once t reaches 1.0.
-                grow_p = phase_progress(logo_in_end, 1.0, t)
+                grow_p = phase_progress(0.0, 1.0, t)
             else:
-                duration_s = max(0.1, scene.get("duration", 3.0))
-                total_life_s = duration_s + max(0.0, scene.get("hold_seconds", 1.0))
-                grow_p = phase_progress(logo_in_end * duration_s, total_life_s, elapsed_seconds)
+                total_life_s = max(0.1, scene.get("duration", 3.0)) + max(0.0, scene.get("hold_seconds", 1.0))
+                grow_p = phase_progress(0.0, total_life_s, elapsed_seconds)
             grow_scale = 1.0 + 0.08 * ease_out_cubic(grow_p)
             if grow_scale != 1.0:
                 gw, gh = logo_img.size
