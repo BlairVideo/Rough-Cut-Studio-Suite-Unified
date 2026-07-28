@@ -300,18 +300,29 @@
 /* Title + tabs + reset/preset actions all in one row along the top of
    the controls bar — horizontal, not a vertical nav rail, since this
    panel is now short and wide (1/3 of the screen height) rather than
-   tall and narrow. */
+   tall and narrow. None of title/tabs/actions used to be able to shrink
+   *or* wrap (title and tabs were flex-shrink:0 via `1 0 auto`, actions
+   was flex:none with its own non-shrinking buttons+input+select) -- so
+   this row always demanded its full natural width and overflowed
+   horizontally below that width, independent of (and in addition to)
+   whichever tab body happened to be open. flex-wrap here (plus letting
+   .cz-tabs/.cz-tab/.cz-controls-head__actions wrap too) means a
+   too-narrow window reflows this onto 2-3 lines instead of overflowing
+   at any width. */
 .cz-controls-head {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 20px;
+  gap: 10px 20px;
 }
 .cz-controls-head .suite-panel-title { flex: none; }
 
 .cz-controls-head__actions {
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
@@ -320,7 +331,19 @@
   height: 28px;
 }
 .cz-controls-head__actions select {
-  max-width: 150px;
+  /* A bare <select> defaults to flex-grow:0, so it shrink-wraps to its
+     own content ("Load preset…" is ~100px) regardless of max-width --
+     max-width was never the binding constraint on its own (confirmed:
+     it was already well above the content width at the old 190px
+     value, so doubling it to 380px was a no-op). Mirroring
+     .cz-preset-name-input's exact flex-basis/max-width (rather than a
+     one-off fixed width) is what keeps the two the same size at every
+     container width, not just whichever width happened to match once --
+     same flex-grow ratio (1) from the same basis (140px) up to the
+     same cap (260px) means they grow and shrink in lockstep. */
+  flex: 1 1 140px;
+  max-width: 260px;
+  min-width: 0;
 }
 
 .cz-controls-main {
@@ -330,17 +353,38 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  /* Explicit, not left to default: per spec, an element with overflow-y
+     set to anything but `visible` computes overflow-x to `auto` too if
+     left unset -- so the tiniest subpixel rounding overflow (a fraction
+     of a px from the flex/grid percentage math in the tabs below) was
+     enough to spawn a real horizontal scrollbar and nudge the rightmost
+     controls out of view, even though nothing was actually overflowing
+     by more than a rounding error. */
+  overflow-x: hidden;
 }
 
 .cz-tabs {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .cz-tab {
-  flex: 1 0 auto;
+  /* basis:0% (not `auto`), so the three tabs split the nav's width
+     equally regardless of how long each one's label is -- `auto` sized
+     each tab off its own content first and only distributed leftover
+     growth on top, so "Basic & Curves" always rendered wider than
+     "LUT". min-width is a floor, not a fixed size -- with flex:1 1 0%
+     alone the three tabs just filled whatever .cz-tabs happened to be
+     given (which could be quite narrow next to the actions group);
+     130px gives each a wider baseline before that grow/shrink math
+     kicks in. */
+  flex: 1 1 0%;
+  min-width: 130px;
+  white-space: nowrap;
   text-align: center;
   padding: 7px 14px;
   font-size: 11px;
@@ -373,12 +417,36 @@
 
 /* HSL panel holds several independent sliders — lay them out in a
    responsive multi-column grid instead of one tall stack now that the
-   controls bar is wide and short rather than narrow and tall. */
+   controls bar is wide and short rather than narrow and tall. This
+   grid sits in the ~42%-wide band-swatch column (.cz-color-hsl), which
+   is narrow enough that a 190px-per-track floor left it sitting right
+   at the 1-vs-2-column threshold -- often losing the coin flip and
+   stacking Hue/Saturation/Luminance as three full-height rows tall
+   enough that the column's total content (bands + 3 stacked sliders)
+   exceeded the wheels' height and forced .cz-controls-main to scroll
+   vertically just to reach Luminance. 150px reliably fits 2 columns
+   (Hue+Saturation side by side, Luminance alone below) in that same
+   ~42% column instead, cutting the stack from 3 rows to 2. */
 #czHslSliders {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px 28px;
+  /* min(150px, 100%) instead of a bare 150px: once this column's own
+     available width drops below 150px, a bare minmax floor would keep
+     demanding 150px and overflow it -- capping the floor at 100%
+     collapses it to a single always-fitting column instead. */
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 6px 20px;
   align-content: start;
+}
+/* Hue/Saturation/Luminance range at -100..100 with a default of 0 (thumb
+   centered) -- drag one toward either extreme and its thumb's center
+   reaches the track's own edge, so half the thumb overhangs the
+   input's box at that end. That overhang used to just be visible past
+   the edge; now that .cz-controls-main clips overflow-x (see above),
+   it reads as the control being cut off right at the edge of the
+   screen -- same root cause as the LUT Intensity slider fix below,
+   applied here to whichever HSL slider gets dragged to an extreme. */
+#czHslSliders .cz-slider-row input[type="range"] {
+  width: calc(100% - 10px);
 }
 
 /* Basic & Curves is a combined tab: the tone/color sliders on the left,
@@ -408,29 +476,38 @@
 }
 
 /* Wheels & HSL is likewise a combined tab: the 3-way wheels take the
-   flexible main width, HSL bands + sliders sit in a fixed-width column
-   on the right, same split pattern as Basic & Curves above. */
+   flexible main width, HSL band swatches + sliders sit stacked in a
+   column on the right, same split pattern as Basic & Curves above.
+   Both columns are `flex: 1 1 N%` (not `0 0 N%`) so they actually
+   shrink together -- two flex-shrink:0 columns + a 24px row gap always
+   demands 100%+24px of the row's width, which overflows by exactly
+   that gap at *every* container size, not just small ones (confirmed:
+   measured scrollWidth exceeding clientWidth by the gap amount from
+   750px all the way up to 1400px). `min-width: 0` lets each column
+   shrink below its own content's min-content size instead of that
+   content (the wheel grid, the HSL slider grid) pinning a floor on the
+   column and reintroducing the same overflow. */
 .cz-tab-panel--color {
   flex-direction: row;
   align-items: flex-start;
   gap: 24px;
 }
 .cz-color-wheels {
-  flex: 0 0 50%;
-  max-width: 50%;
+  flex: 1 1 58%;
   min-width: 0;
 }
 .cz-color-hsl {
-  flex: 0 0 50%;
-  max-width: 50%;
+  flex: 1 1 42%;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .cz-preset-name-input {
-  flex: 1;
+  flex: 1 1 140px;
+  max-width: 260px;
+  min-width: 0;
   background: var(--bg-input);
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
@@ -475,7 +552,14 @@
 
 .cz-wheels {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* minmax(0, 1fr), not a bare 1fr: a bare 1fr track still carries an
+     implicit automatic minimum equal to its content's min-content size,
+     which (combined with .cz-wheel below being width-driven off this
+     column) would put a floor under the column and reintroduce overflow
+     exactly like the two flex columns above. 0 removes that floor so
+     the column -- and the wheel inside it -- can shrink all the way
+     down to whatever width the row actually has. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 .cz-wheel-block {
@@ -483,6 +567,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 .cz-wheel-block__head {
   display: flex;
@@ -508,8 +593,18 @@
 .cz-wheel-block__reset:hover { color: var(--amber); }
 .cz-wheel {
   position: relative;
-  width: 208px;
-  height: 208px;
+  /* Fluid by width (100% of its grid column) rather than a fixed px
+     size -- the column already shrinks with however much horizontal
+     room .cz-color-wheels actually has, so the wheel now tracks width
+     directly instead of only reacting to the container-height tiers
+     below. aspect-ratio keeps it a true circle at any resulting width;
+     max-width caps how big it gets when the column is wide, and the
+     height-tiered @container rules further down ratchet that cap
+     tighter as available height shrinks too, so neither axis alone can
+     force the other to overflow. */
+  width: 100%;
+  max-width: 208px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   cursor: crosshair;
   touch-action: none;
@@ -529,7 +624,7 @@
   pointer-events: none;
 }
 .cz-wheel-block input[type="range"] {
-  width: 208px;
+  width: 100%;
   accent-color: var(--teal);
 }
 
@@ -581,6 +676,18 @@
 
 /* LUT panel */
 
+/* Unlike Basic/Wheels/HSL (which shrink their own content to fit via the
+   @container height tiers below), the LUT panel's import button and
+   intensity slider are fixed-height chrome around a list that can hold
+   an arbitrary number of LUTs -- so instead of shrinking text, it makes
+   the *list* the one flexible/scrollable region. Stretching the panel
+   to fill .cz-controls-main's full height (rather than sizing to
+   content, the flex default) is what gives the list something concrete
+   to flex against. */
+#czPanelLut {
+  flex: 1;
+  min-height: 0;
+}
 .cz-lut-list {
   list-style: none;
   margin: 0;
@@ -588,8 +695,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 auto;
+  min-height: 48px;
   max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .cz-lut-item {
   display: flex;
@@ -614,6 +724,19 @@
   cursor: pointer;
 }
 .cz-lut-item__remove:hover { color: var(--danger); }
+
+/* The Intensity slider's own row shares .cz-slider-row/input[type=range]
+   with Basic and HSL (width:100% there), but at value=100 a native range
+   thumb's center sits at the track's right edge -- half the thumb's
+   width overhangs past the input's own box at that end. That overhang
+   used to just be visible past the edge; now that .cz-lut-list's parent
+   scopes overflow-x:hidden (see #czPanelLut above), it gets clipped
+   instead, reading as the control being cut off. Narrowing just this
+   track (not the shared Basic/HSL rule) leaves room for the thumb to
+   sit fully inside the panel at any value. */
+#czPanelLut .cz-slider-row input[type="range"] {
+  width: calc(100% - 10px);
+}
 
 /* export jobs (mirrors .suite-job__* markup/classes from suite.css) */
 
@@ -646,8 +769,7 @@
   #czCurveCanvas { height: 100px; }
   .cz-color-hsl { gap: 6px; }
   .cz-wheels { gap: 6px; }
-  .cz-wheel { width: 143px; height: 143px; }
-  .cz-wheel-block input[type="range"] { width: 143px; }
+  .cz-wheel { max-width: 143px; }
 }
 
 @container cz-controls (max-height: 210px) {
@@ -660,8 +782,7 @@
   .cz-basic-curves .suite-hint { display: none; }
   #czCurveCanvas { height: 70px; }
   .cz-curve-channels button { padding: 2px; }
-  .cz-wheel { width: 109px; height: 109px; }
-  .cz-wheel-block input[type="range"] { width: 109px; }
+  .cz-wheel { max-width: 109px; }
 }
 
 @container cz-controls (max-height: 160px) {
@@ -678,6 +799,5 @@
   #czCurveCanvas { height: 40px; }
   .cz-color-hsl { gap: 4px; }
   .cz-curve-channels button { padding: 1px; font-size: 9px; }
-  .cz-wheel { width: 83px; height: 83px; }
-  .cz-wheel-block input[type="range"] { width: 83px; }
+  .cz-wheel { max-width: 83px; }
 }
