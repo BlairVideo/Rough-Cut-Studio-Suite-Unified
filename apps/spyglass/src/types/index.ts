@@ -44,6 +44,7 @@ export interface BackgroundWorkStatus {
   manually_paused: boolean;
   idle_seconds: number | null;
   min_idle_seconds: number;
+  force_active: boolean;
 }
 
 export interface GapFillProgress {

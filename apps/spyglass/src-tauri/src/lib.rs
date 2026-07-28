@@ -92,6 +92,7 @@ pub fn run() {
             commands::retry_failed_jobs,
             commands::set_queue_paused,
             commands::get_queue_paused,
+            commands::force_gap_fill_now,
             commands::get_background_work_status,
             commands::search_transcripts,
             commands::search_shots,

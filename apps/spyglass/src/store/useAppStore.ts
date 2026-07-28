@@ -51,6 +51,7 @@ interface AppState {
   refreshQueuePaused: () => Promise<void>;
   toggleQueuePaused: () => Promise<void>;
   refreshBackgroundWorkStatus: () => Promise<void>;
+  forceGapFillNow: () => Promise<void>;
   setStatusMessage: (message: string | null) => void;
 
   refreshPool: () => Promise<void>;
@@ -230,6 +231,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ queuePaused: next });
     } catch (err) {
       set({ statusMessage: `Could not update the background queue: ${String(err)}` });
+    }
+  },
+
+  // Bypasses the idle gate until the pending queue drains (the engine
+  // clears the override on its own once it does) -- see
+  // `force_gap_fill_now`'s doc comment. A no-op while manually paused;
+  // `get().queuePaused` guards the call site in the panel rather than
+  // here, so this stays a thin wrapper matching every other action above.
+  forceGapFillNow: async () => {
+    try {
+      await api.forceGapFillNow();
+      await get().refreshBackgroundWorkStatus();
+    } catch (err) {
+      set({ statusMessage: `Could not start processing now: ${String(err)}` });
     }
   },
 

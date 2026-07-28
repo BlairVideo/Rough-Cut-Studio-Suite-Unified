@@ -54,6 +54,8 @@ export const api = {
 
   getQueuePaused: () => invoke<boolean>("get_queue_paused"),
 
+  forceGapFillNow: () => invoke<void>("force_gap_fill_now"),
+
   getBackgroundWorkStatus: () => invoke<BackgroundWorkStatus>("get_background_work_status"),
 
   searchTranscripts: (query: string) => invoke<TranscriptSearchResult[]>("search_transcripts", { query }),

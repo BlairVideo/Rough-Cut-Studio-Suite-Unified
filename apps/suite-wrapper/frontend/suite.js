@@ -89,6 +89,7 @@
       activeTags: new Set(),   // tag facet filter, OR'd together (matches FacetFilters.tags)
       allTags: [],             // [{label, shot_count}] from spyglass_list_facets
       roots: [],               // [{...WatchedRootStatus}] from spyglass_list_watched_roots
+      queueStatus: null,        // {manually_paused, idle_seconds, min_idle_seconds, force_active} from spyglass_background_work_status
       pool: [],                // [{...ShotSearchResult}] from spyglass_pool_get, in pool order
       consolidateDest: "",
       consolidateEstimate: null,
@@ -336,7 +337,7 @@
     // The waveform canvas is sized from its (hidden) host's clientWidth,
     // which is 0 while the workspace itself is hidden — redraw once it
     // becomes visible so it isn't stuck at a stale/zero width.
-    if (name === "spyglass") { loadSpyglassFacets(); loadSpyglassRoots(); loadSpyglassPool(); loadSpyglassFolderTree(); }
+    if (name === "spyglass") { loadSpyglassFacets(); loadSpyglassRoots(); loadSpyglassQueueStatus(); loadSpyglassPool(); loadSpyglassFolderTree(); }
     updateSpyglassRootsPolling();
     if (name === "sync") scheduleSyncWaveformRedraw();
     if (name === "harmonize") scheduleHarmonizeWaveformRedraw();
@@ -1705,6 +1706,50 @@
     renderSpyglassRoots();
   }
 
+  // Idle-gated background indexing (Section 7: pauses automatically while
+  // the machine is in active use, resumes after min_idle_seconds) means a
+  // folder that was just scanned can sit with clips registered but zero
+  // shots for as long as someone's actually using this computer -- and a
+  // clip with no shots yet is invisible in Search/Browse (both join
+  // through `shots`), which looks exactly like "some clips are missing."
+  // This surfaces that state and the "Process now" override that bypasses
+  // it for one queue-drain pass -- see spyglass_force_gap_fill_now.
+  async function loadSpyglassQueueStatus() {
+    const res = await call("spyglass_background_work_status");
+    if (!res.ok) return;
+    S.spyglass.queueStatus = res.status;
+    renderSpyglassQueueStatus();
+  }
+
+  function renderSpyglassQueueStatus() {
+    const status = S.spyglass.queueStatus;
+    const statusEl = $("sgQueueStatus");
+    const toggleBtn = $("sgQueuePauseToggle");
+    const forceBtn = $("sgQueueForceNow");
+    if (!status) { statusEl.textContent = "Loading…"; return; }
+
+    toggleBtn.textContent = status.manually_paused ? "Resume" : "Pause";
+
+    const idleGated =
+      !status.manually_paused &&
+      !status.force_active &&
+      status.idle_seconds != null &&
+      status.idle_seconds < status.min_idle_seconds;
+
+    if (status.manually_paused) {
+      statusEl.textContent = "Paused.";
+    } else if (status.force_active) {
+      statusEl.textContent = "Processing now (forced), regardless of idle state.";
+    } else if (idleGated) {
+      const secondsLeft = Math.ceil(status.min_idle_seconds - status.idle_seconds);
+      statusEl.textContent = `Waiting for idle (~${secondsLeft}s) — pauses automatically while this machine is in active use.`;
+    } else {
+      statusEl.textContent = "Running.";
+    }
+
+    forceBtn.disabled = status.manually_paused || status.force_active;
+  }
+
   // Gap-fill indexing runs continuously in the background (in-process, via
   // spyglass_core), completely independent of this panel being open --
   // unlike the Sync/Transcribe/B-Roll/Harmonize job system, it never
@@ -1720,7 +1765,12 @@
 
   function updateSpyglassRootsPolling() {
     if (spyglassRootsPanelVisible()) {
-      if (!S.spyglass.rootsPolling) S.spyglass.rootsPolling = setInterval(loadSpyglassRoots, 4000);
+      if (!S.spyglass.rootsPolling) {
+        S.spyglass.rootsPolling = setInterval(() => {
+          loadSpyglassRoots();
+          loadSpyglassQueueStatus();
+        }, 4000);
+      }
     } else if (S.spyglass.rootsPolling) {
       clearInterval(S.spyglass.rootsPolling);
       S.spyglass.rootsPolling = null;
@@ -2396,6 +2446,22 @@
       const shot = S.spyglass.results.find((s) => s.shot_id === shotId);
       if (shot) { shot.tags = shot.tags || []; if (!shot.tags.includes(label)) shot.tags.push(label); }
       renderSpyglassResults();
+    });
+
+    // ---- background indexing queue ----
+
+    $("sgQueuePauseToggle").addEventListener("click", async () => {
+      const nextPaused = !(S.spyglass.queueStatus && S.spyglass.queueStatus.manually_paused);
+      const res = await call("spyglass_set_queue_paused", nextPaused);
+      if (!res.ok) { toast(res.error || "Couldn't update background indexing.", "error"); return; }
+      await loadSpyglassQueueStatus();
+    });
+
+    $("sgQueueForceNow").addEventListener("click", async () => {
+      const res = await call("spyglass_force_gap_fill_now");
+      if (!res.ok) { toast(res.error || "Couldn't start processing now.", "error"); return; }
+      toast("Processing the analysis queue now, regardless of idle state.", "ok");
+      await loadSpyglassQueueStatus();
     });
 
     // ---- watched roots ----
@@ -5082,6 +5148,7 @@
       ceApplyDraftToForm();
     } else if (tab === "search") {
       loadSpyglassRoots();
+      loadSpyglassQueueStatus();
     } else if (tab === "transcribe") {
       refreshTokenStatus();
     } else if (tab === "graphics") {

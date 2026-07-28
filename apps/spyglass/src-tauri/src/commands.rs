@@ -445,6 +445,21 @@ pub fn get_queue_paused(state: State<Arc<EngineState>>) -> Result<bool, String> 
     Ok(state.queue_control.paused.load(Ordering::Relaxed))
 }
 
+/// "Process now" override (Section 7's idle gate otherwise means a scan
+/// run while the machine is in active use just piles up an ever-growing
+/// backlog with no way to work through it short of walking away from the
+/// keyboard): bypasses `idle::background_work_allowed`'s idle check --
+/// but not a manual pause, which still wins outright -- until the pending
+/// queue drains on its own, at which point `gap_fill_worker`'s loop clears
+/// the flag itself. A no-op if the queue is currently paused; the caller
+/// is expected to also surface that in the UI rather than silently doing
+/// nothing.
+#[tauri::command]
+pub fn force_gap_fill_now(state: State<Arc<EngineState>>) -> Result<(), String> {
+    state.queue_control.force_active.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
 /// What `get_queue_paused`'s plain boolean can't tell the panel: the queue
 /// can look "Running" (not manually paused) while still doing nothing at
 /// all, because the idle gate (Section 7: pause during active editing,
@@ -459,6 +474,10 @@ pub struct BackgroundWorkStatus {
     /// don't block" by `idle::background_work_allowed`, same as here).
     pub idle_seconds: Option<f64>,
     pub min_idle_seconds: f64,
+    /// Whether a "process now" override (`force_gap_fill_now`) is
+    /// currently bypassing the idle check. Cleared automatically once the
+    /// queue drains -- see that command's doc comment.
+    pub force_active: bool,
 }
 
 #[tauri::command]
@@ -467,6 +486,7 @@ pub fn get_background_work_status(state: State<Arc<EngineState>>) -> BackgroundW
         manually_paused: state.queue_control.paused.load(Ordering::Relaxed),
         idle_seconds: spyglass_engine::idle::system_idle_seconds(),
         min_idle_seconds: crate::MIN_IDLE_SECONDS,
+        force_active: state.queue_control.force_active.load(Ordering::Relaxed),
     }
 }
 

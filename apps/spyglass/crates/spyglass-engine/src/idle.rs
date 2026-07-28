@@ -16,13 +16,18 @@ use std::sync::atomic::Ordering;
 
 /// The single gate every background loop (gap-fill worker, rescan
 /// scheduler) checks before starting new work: the manual pause toggle
-/// wins outright, otherwise the machine must have been idle (Section 7)
-/// for at least `min_idle_seconds`. Shared here so the two loops can't
-/// drift into checking this two different ways.
+/// wins outright, otherwise a "process now" override (`QueueControl::
+/// force_active` -- see its doc comment) lets work proceed regardless of
+/// idle state, otherwise the machine must have been idle (Section 7) for
+/// at least `min_idle_seconds`. Shared here so the two loops can't drift
+/// into checking this two different ways.
 pub fn background_work_allowed(state: &EngineState, min_idle_seconds: f64) -> bool {
     let paused = state.queue_control.paused.load(Ordering::Relaxed);
     if paused {
         return false;
+    }
+    if state.queue_control.force_active.load(Ordering::Relaxed) {
+        return true;
     }
     system_idle_seconds()
         .map(|secs| secs >= min_idle_seconds)
@@ -47,6 +52,18 @@ pub fn system_idle_seconds() -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spyglass_core::Db;
+    use std::sync::atomic::{AtomicU64, Ordering as StdOrdering};
+
+    static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn scratch_state() -> EngineState {
+        let n = TMP_COUNTER.fetch_add(1, StdOrdering::SeqCst);
+        let db_path = std::env::temp_dir().join(format!("spyglass_idle_test_{n}.sqlite"));
+        std::fs::remove_file(&db_path).ok();
+        let db = Db::open_at(&db_path).unwrap();
+        EngineState::new(db, std::env::temp_dir())
+    }
 
     #[test]
     fn system_idle_seconds_returns_a_plausible_value_on_this_machine() {
@@ -56,5 +73,37 @@ mod tests {
         let idle = system_idle_seconds();
         assert!(idle.is_some());
         assert!(idle.unwrap() >= 0.0);
+    }
+
+    #[test]
+    fn force_active_bypasses_an_otherwise_unreachable_idle_threshold() {
+        let state = scratch_state();
+        // A threshold no real machine will ever be idle long enough to
+        // clear on its own -- proves the override actually bypasses the
+        // idle check itself, not just a low one that happened to pass.
+        let unreachable_min_idle = f64::MAX;
+
+        assert!(
+            !background_work_allowed(&state, unreachable_min_idle),
+            "without the override, an unreachable idle threshold must block work"
+        );
+
+        state.queue_control.force_active.store(true, Ordering::Relaxed);
+        assert!(
+            background_work_allowed(&state, unreachable_min_idle),
+            "the \"process now\" override must bypass the idle check entirely"
+        );
+    }
+
+    #[test]
+    fn manual_pause_wins_over_the_force_active_override() {
+        let state = scratch_state();
+        state.queue_control.force_active.store(true, Ordering::Relaxed);
+        state.queue_control.paused.store(true, Ordering::Relaxed);
+
+        assert!(
+            !background_work_allowed(&state, 0.0),
+            "a manual pause must still block work even while a \"process now\" override is active"
+        );
     }
 }

@@ -272,6 +272,11 @@ def get_queue_paused():
     return _spyglass_core.get_queue_paused()
 
 
+def force_gap_fill_now():
+    ensure_initialized()
+    return _spyglass_core.force_gap_fill_now()
+
+
 def get_background_work_status():
     ensure_initialized()
     return _spyglass_core.get_background_work_status()

@@ -996,6 +996,13 @@
 
         <div class="suite-settings-pane" id="settingsPaneSearch" data-settings-pane="search" hidden>
           <div class="suite-block">
+            <h3 class="suite-block-title">Background Indexing</h3>
+            <p class="suite-hint suite-hint--tight" id="sgQueueStatus">Loading…</p>
+            <button class="suite-btn suite-btn--ghost" id="sgQueuePauseToggle">Pause</button>
+            <button class="suite-btn suite-btn--ghost" id="sgQueueForceNow" title="Bypass the idle wait and start analyzing the queue right now, until it drains or you pause it">Process now</button>
+          </div>
+
+          <div class="suite-block">
             <h3 class="suite-block-title">Watched Roots</h3>
             <p class="suite-hint suite-hint--tight">Folders Spyglass scans and indexes for the Search workspace.</p>
             <div class="suite-list" id="sgRootsList">

@@ -271,6 +271,7 @@ struct BackgroundWorkStatusPy {
     manually_paused: bool,
     idle_seconds: Option<f64>,
     min_idle_seconds: f64,
+    force_active: bool,
 }
 
 #[derive(Serialize)]
@@ -594,6 +595,17 @@ fn get_queue_paused() -> PyResult<bool> {
     Ok(state.queue_control.paused.load(std::sync::atomic::Ordering::Relaxed))
 }
 
+/// "Process now" override -- see `spyglass_engine::idle`'s doc comment and
+/// the Tauri shell's `commands::force_gap_fill_now`, which this mirrors.
+/// Bypasses the idle-time gate (but not a manual pause) until the pending
+/// queue drains, at which point the gap-fill worker clears it on its own.
+#[pyfunction]
+fn force_gap_fill_now() -> PyResult<()> {
+    let state = state()?;
+    state.queue_control.force_active.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
 #[pyfunction]
 fn get_background_work_status(py: Python<'_>) -> PyResult<PyObject> {
     let state = state()?;
@@ -601,6 +613,7 @@ fn get_background_work_status(py: Python<'_>) -> PyResult<PyObject> {
         manually_paused: state.queue_control.paused.load(std::sync::atomic::Ordering::Relaxed),
         idle_seconds: spyglass_engine::idle::system_idle_seconds(),
         min_idle_seconds: 20.0,
+        force_active: state.queue_control.force_active.load(std::sync::atomic::Ordering::Relaxed),
     };
     pythonize(py, &status).map_err(to_py_err).map(|b| b.into())
 }
@@ -792,6 +805,7 @@ fn spyglass_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(retry_failed_jobs, m)?)?;
     m.add_function(wrap_pyfunction!(set_queue_paused, m)?)?;
     m.add_function(wrap_pyfunction!(get_queue_paused, m)?)?;
+    m.add_function(wrap_pyfunction!(force_gap_fill_now, m)?)?;
     m.add_function(wrap_pyfunction!(get_background_work_status, m)?)?;
     m.add_function(wrap_pyfunction!(estimate_consolidate_export, m)?)?;
     m.add_function(wrap_pyfunction!(start_consolidate_export, m)?)?;

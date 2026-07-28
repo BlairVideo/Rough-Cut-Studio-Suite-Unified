@@ -676,7 +676,9 @@ export function WatchedRootsPanel() {
   const toggleQueuePaused = useAppStore((s) => s.toggleQueuePaused);
   const backgroundWorkStatus = useAppStore((s) => s.backgroundWorkStatus);
   const refreshBackgroundWorkStatus = useAppStore((s) => s.refreshBackgroundWorkStatus);
+  const forceGapFillNow = useAppStore((s) => s.forceGapFillNow);
   const [syncingCardEater, setSyncingCardEater] = useState(false);
+  const [forcingGapFill, setForcingGapFill] = useState(false);
 
   useEffect(() => {
     void refreshWatchedRoots();
@@ -690,14 +692,33 @@ export function WatchedRootsPanel() {
     return () => clearInterval(interval);
   }, [refreshWatchedRoots, refreshQueuePaused, refreshBackgroundWorkStatus]);
 
+  const forceActive = backgroundWorkStatus?.force_active ?? false;
   const idleGated =
     !queuePaused &&
+    !forceActive &&
     backgroundWorkStatus != null &&
     backgroundWorkStatus.idle_seconds != null &&
     backgroundWorkStatus.idle_seconds < backgroundWorkStatus.min_idle_seconds;
   const secondsUntilIdle = idleGated
     ? Math.ceil(backgroundWorkStatus!.min_idle_seconds - backgroundWorkStatus!.idle_seconds!)
     : 0;
+
+  // Bypasses the idle gate for one drain of the current queue -- without
+  // this, indexing/analysis a scan just registered stays stuck behind
+  // `min_idle_seconds` of hands-off-the-machine time for as long as the
+  // machine is actually in use, which can leave a folder that was just
+  // scanned looking empty in Search/Browse (clips with no shots yet are
+  // invisible there) with no way to force it through. Auto-clears itself
+  // once the backlog is empty -- see `force_gap_fill_now`'s doc comment.
+  const processNow = async () => {
+    setForcingGapFill(true);
+    try {
+      await forceGapFillNow();
+      setStatusMessage("Processing the analysis queue now, regardless of idle state.");
+    } finally {
+      setForcingGapFill(false);
+    }
+  };
 
   const syncCardEater = async () => {
     setSyncingCardEater(true);
@@ -741,11 +762,25 @@ export function WatchedRootsPanel() {
         <span className={queuePaused ? "text-warm-grey" : idleGated ? "text-warm-grey" : "text-athletic-blue-light"}>
           {queuePaused
             ? "Paused (tap to resume)"
-            : idleGated
-              ? `Waiting for idle (~${secondsUntilIdle}s) -- tap to pause`
-              : "Running -- tap to pause"}
+            : forceActive
+              ? "Processing now (forced) -- tap to pause"
+              : idleGated
+                ? `Waiting for idle (~${secondsUntilIdle}s) -- tap to pause`
+                : "Running -- tap to pause"}
         </span>
       </button>
+
+      {idleGated && (
+        <button
+          type="button"
+          onClick={() => void processNow()}
+          disabled={forcingGapFill}
+          className="mb-2 rounded border border-border-subtle px-3 py-2 text-xs text-white hover:border-athletic-blue-light disabled:opacity-50"
+          title="Bypass the idle wait and start analyzing the queue right now, until it drains or you pause it"
+        >
+          {forcingGapFill ? "Starting..." : "Process now"}
+        </button>
+      )}
 
       <button
         type="button"

@@ -429,6 +429,20 @@ class SpyglassMixin:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
+    def spyglass_force_gap_fill_now(self):
+        """"Process now" override -- bypasses the idle-time gate (Section 7)
+        that otherwise leaves recently-scanned clips with no shots yet, and
+        therefore invisible in Search/Browse (both join through `shots`),
+        for as long as the machine stays in active use. Auto-clears itself
+        once the pending queue drains -- see spyglass_bridge.force_gap_fill_now
+        and the engine's own force_active doc comment."""
+        try:
+            spyglass_bridge.force_gap_fill_now()
+            return {"ok": True}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
     def spyglass_background_work_status(self):
         try:
             return {"ok": True, "status": spyglass_bridge.get_background_work_status()}

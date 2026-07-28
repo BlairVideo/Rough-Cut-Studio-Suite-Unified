@@ -13,6 +13,14 @@ use std::sync::{Arc, Mutex};
 #[derive(Default)]
 pub struct QueueControl {
     pub paused: AtomicBool,
+    /// "Process now" override: bypasses the idle-time gate (but not
+    /// `paused`) until the pending queue actually drains, at which point
+    /// `gap_fill_worker`'s loop clears it on its own -- see that module's
+    /// doc comment. Exists because the idle gate alone means a scan run
+    /// while the machine is in active use just piles up an ever-growing
+    /// backlog of unanalyzed clips with no way to work through it short of
+    /// walking away from the keyboard for `min_idle_seconds`.
+    pub force_active: AtomicBool,
 }
 
 pub struct EngineState {

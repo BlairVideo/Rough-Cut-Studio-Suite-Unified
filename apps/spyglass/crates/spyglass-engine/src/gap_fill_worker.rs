@@ -124,6 +124,12 @@ async fn worker_loop(state: Arc<EngineState>, config: Arc<WorkerConfig>) {
 
         let claimed = claim_next(&state);
         let Some((job, clip, broll_entry)) = claimed else {
+            // Nothing left to claim -- if a "process now" override was
+            // driving the queue through the idle gate, its job is done;
+            // clear it so the worker goes back to waiting for real idle
+            // instead of continuing to bypass it (system-wide, since
+            // `claim_next_pending_job` isn't scoped to one root) forever.
+            state.queue_control.force_active.store(false, Ordering::Relaxed);
             tokio::time::sleep(POLL_INTERVAL).await;
             continue;
         };
