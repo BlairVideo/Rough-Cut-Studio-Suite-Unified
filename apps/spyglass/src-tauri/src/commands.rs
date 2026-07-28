@@ -302,6 +302,7 @@ pub async fn scan_transcriber_sidecars(app: AppHandle, root_path: String) -> Res
             let already_existed = db::find_clip_by_path(&conn, &video_path)
                 .map_err(|e| e.to_string())?
                 .is_some();
+            let recorded_at = spyglass_core::ffprobe::recorded_at_for_file(Path::new(&video_path));
             let clip = db::upsert_clip(
                 &conn,
                 &NewClip {
@@ -310,6 +311,7 @@ pub async fn scan_transcriber_sidecars(app: AppHandle, root_path: String) -> Res
                     checksum: None,
                     size_bytes: sidecar.video_size,
                     duration_sec: None,
+                    recorded_at,
                 },
             )
             .map_err(|e| e.to_string())?;
@@ -375,6 +377,7 @@ pub async fn scan_broll_cache(app: AppHandle, root_path: String) -> Result<ScanR
                     .is_some();
                 let size_bytes = std::fs::metadata(&abs_path).ok().map(|m| m.len() as i64);
                 let checksum = scanner::compute_checksum(&abs_path).ok();
+                let recorded_at = spyglass_core::ffprobe::recorded_at_for_file(&abs_path);
                 db::upsert_clip(
                     &conn,
                     &NewClip {
@@ -383,6 +386,7 @@ pub async fn scan_broll_cache(app: AppHandle, root_path: String) -> Result<ScanR
                         checksum,
                         size_bytes,
                         duration_sec: None,
+                        recorded_at,
                     },
                 )
                 .map_err(|e| e.to_string())?;

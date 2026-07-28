@@ -9,6 +9,7 @@
 //! (Card Eater's own conventions, this repo's `CLAUDE.md`): shells out to
 //! the system `ffprobe` rather than pulling in an FFI/decoder dependency.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
@@ -132,6 +133,86 @@ pub fn probe_audio_format_or_fallback(path: &Path) -> AudioFormat {
     probe_audio_format(path).ok().flatten().unwrap_or(AudioFormat::FALLBACK)
 }
 
+/// The format-level string ISO 8601 timestamp columns in this schema share
+/// (`clips.ingested_at`, and now `clips.recorded_at`) all use: millisecond
+/// precision, `Z` suffix -- matters because sort-by-date compares these as
+/// plain strings (facets.rs/search.rs), so every writer needs the same
+/// width or lexicographic ordering breaks.
+fn format_timestamp(dt: DateTime<Utc>) -> String {
+    dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
+#[derive(Debug, Deserialize)]
+struct FfprobeFormatTags {
+    #[serde(default)]
+    creation_time: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FfprobeFormat {
+    #[serde(default)]
+    tags: Option<FfprobeFormatTags>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FfprobeFormatOutput {
+    #[serde(default)]
+    format: Option<FfprobeFormat>,
+}
+
+/// Parses `ffprobe -show_entries format_tags=creation_time -of json`'s
+/// stdout, normalizing the tag's own timestamp format to this schema's
+/// shared string-sortable one (see `format_timestamp`). `Ok(None)` covers
+/// both "no such tag" (common for re-muxed/converted files) and an
+/// unparseable value -- split out for unit testing without spawning
+/// ffprobe, same convention as `parse_ffprobe_json`.
+fn parse_creation_time_json(stdout: &[u8]) -> Result<Option<String>, ProbeError> {
+    let parsed: FfprobeFormatOutput =
+        serde_json::from_slice(stdout).map_err(|e| ProbeError::InvalidOutput(e.to_string()))?;
+    let Some(raw) = parsed.format.and_then(|f| f.tags).and_then(|t| t.creation_time) else {
+        return Ok(None);
+    };
+    Ok(DateTime::parse_from_rfc3339(&raw).ok().map(|dt| format_timestamp(dt.with_timezone(&Utc))))
+}
+
+/// The camera/editing-software-embedded `creation_time` tag -- the closest
+/// thing to a real capture date this pipeline can read, independent of
+/// when Spyglass happened to scan the file (`clips.ingested_at`). `Ok(None)`
+/// (not an error) covers both "no such tag" and an unparseable timestamp --
+/// both mean "fall back to mtime", same non-fatal contract as
+/// `probe_audio_format`.
+pub fn probe_creation_time(path: &Path) -> Result<Option<String>, ProbeError> {
+    let output = Command::new(crate::ffmpeg_paths::ffprobe_path())
+        .args(["-v", "error", "-show_entries", "format_tags=creation_time", "-of", "json"])
+        .arg(path)
+        .output()
+        .map_err(|e| ProbeError::Spawn(e.to_string()))?;
+
+    if !output.status.success() {
+        return Err(ProbeError::Failed {
+            status: output.status.code().unwrap_or(-1),
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        });
+    }
+
+    parse_creation_time_json(&output.stdout)
+}
+
+/// The best available real-world capture timestamp for `path`: the
+/// embedded `creation_time` tag when ffprobe can read one, otherwise the
+/// filesystem mtime. `None` only when both fail (ffprobe missing/errored
+/// with no tag, and the file's own metadata is unreadable -- e.g. its
+/// watched-root drive is offline) -- callers treat that the same as "not
+/// yet known" (`clips.recorded_at` stays NULL, sort-by-date falls back to
+/// `ingested_at` via SQL `COALESCE`).
+pub fn recorded_at_for_file(path: &Path) -> Option<String> {
+    if let Ok(Some(creation_time)) = probe_creation_time(path) {
+        return Some(creation_time);
+    }
+    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(format_timestamp(DateTime::<Utc>::from(modified)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,5 +320,44 @@ mod tests {
         assert_eq!(mono_format.sample_rate, 44100);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn parses_creation_time_and_normalizes_microsecond_precision_to_millis() {
+        // Real shape confirmed against an actual camera file (Section
+        // 12/13's sort-by-date bug): ffprobe reports 6-digit microseconds,
+        // but `clips.ingested_at` (and every other timestamp column sort-
+        // by-date compares against) only ever has 3.
+        let json = br#"{"format":{"tags":{"creation_time":"2024-10-22T17:13:32.000000Z"}}}"#;
+        assert_eq!(parse_creation_time_json(json).unwrap(), Some("2024-10-22T17:13:32.000Z".to_string()));
+    }
+
+    #[test]
+    fn missing_creation_time_tag_is_none_not_an_error() {
+        // Common for re-muxed/converted files that dropped the original
+        // metadata -- callers fall back to mtime, this must not be
+        // mistaken for a probe failure.
+        let json = br#"{"format":{"tags":{}}}"#;
+        assert_eq!(parse_creation_time_json(json).unwrap(), None);
+    }
+
+    #[test]
+    fn missing_tags_object_entirely_is_none() {
+        let json = br#"{"format":{}}"#;
+        assert_eq!(parse_creation_time_json(json).unwrap(), None);
+    }
+
+    #[test]
+    fn unparseable_creation_time_value_is_none_not_an_error() {
+        let json = br#"{"format":{"tags":{"creation_time":"not-a-timestamp"}}}"#;
+        assert_eq!(parse_creation_time_json(json).unwrap(), None);
+    }
+
+    #[test]
+    fn recorded_at_for_file_falls_back_to_mtime_when_ffprobe_finds_no_file() {
+        // No real video file, and no ffprobe process can succeed against a
+        // nonexistent path -- `std::fs::metadata` also fails, so this
+        // exercises the full "both signals absent" -> None path.
+        assert_eq!(recorded_at_for_file(Path::new("/nonexistent/path/does-not-exist.mov")), None);
     }
 }

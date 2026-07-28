@@ -286,17 +286,20 @@ fn order_scored_shots(conn: &Connection, scored: &mut [(i64, f64)], sort_by: cra
         }
     }
 
-    let mut ingested_at: HashMap<i64, String> = HashMap::new();
+    // `COALESCE(c.recorded_at, c.ingested_at)` -- see facets.rs's
+    // `browse_order_by_clause` doc comment for why sort-by-date can't use
+    // `ingested_at` alone (it's scan time, not capture time).
+    let mut recorded_at: HashMap<i64, String> = HashMap::new();
     let mut quality: HashMap<i64, Option<f64>> = HashMap::new();
     let mut energy: HashMap<i64, Option<f64>> = HashMap::new();
     for &(shot_id, _) in scored.iter() {
-        let (ia, q, e) = conn.query_row(
-            "SELECT c.ingested_at, s.technical_quality_score, s.energy_score
+        let (ra, q, e) = conn.query_row(
+            "SELECT COALESCE(c.recorded_at, c.ingested_at), s.technical_quality_score, s.energy_score
              FROM shots s JOIN clips c ON c.id = s.clip_id WHERE s.id = ?1",
             params![shot_id],
             |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<f64>>(1)?, r.get::<_, Option<f64>>(2)?)),
         )?;
-        ingested_at.insert(shot_id, ia);
+        recorded_at.insert(shot_id, ra);
         quality.insert(shot_id, q);
         energy.insert(shot_id, e);
     }
@@ -305,8 +308,8 @@ fn order_scored_shots(conn: &Connection, scored: &mut [(i64, f64)], sort_by: cra
         let relevance_tiebreak = || b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal);
         match sort_by {
             SortBy::Relevance => unreachable!("handled above"),
-            SortBy::NewestFirst => ingested_at[&b.0].cmp(&ingested_at[&a.0]).then_with(relevance_tiebreak),
-            SortBy::OldestFirst => ingested_at[&a.0].cmp(&ingested_at[&b.0]).then_with(relevance_tiebreak),
+            SortBy::NewestFirst => recorded_at[&b.0].cmp(&recorded_at[&a.0]).then_with(relevance_tiebreak),
+            SortBy::OldestFirst => recorded_at[&a.0].cmp(&recorded_at[&b.0]).then_with(relevance_tiebreak),
             SortBy::HighestQuality => cmp_desc_none_last(quality[&a.0], quality[&b.0]).then_with(relevance_tiebreak),
             SortBy::MostEnergy => cmp_desc_none_last(energy[&a.0], energy[&b.0]).then_with(relevance_tiebreak),
         }
@@ -634,6 +637,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -665,6 +669,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -699,6 +704,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -739,6 +745,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -769,6 +776,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -824,6 +832,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -891,6 +900,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -941,6 +951,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -978,6 +989,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1012,6 +1024,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1038,6 +1051,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1055,6 +1069,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1089,6 +1104,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1118,6 +1134,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1160,6 +1177,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1189,6 +1207,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1246,6 +1265,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();

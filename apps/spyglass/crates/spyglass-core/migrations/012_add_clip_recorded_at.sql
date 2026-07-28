@@ -1,0 +1,13 @@
+-- The real-world capture date for this file (ffprobe's embedded
+-- `creation_time` format tag, or filesystem mtime as a fallback) --
+-- distinct from `ingested_at`, which only records when Spyglass happened
+-- to scan the file into the archive. `SortBy::NewestFirst`/`OldestFirst`
+-- (facets.rs) previously ordered by `ingested_at` alone, which is
+-- meaningless for a bulk-imported archive: every file in a backlog scan
+-- gets the same few-hour ingestion window regardless of when the actual
+-- footage was recorded, so "newest/oldest" looked effectively unordered.
+-- Nullable: existing rows are backfilled separately (db::backfill_recorded_at),
+-- and a probe can genuinely fail (file offline, no ffprobe on PATH) --
+-- sort-by-date SQL falls back to `ingested_at` via COALESCE for any row
+-- where this is still NULL.
+ALTER TABLE clips ADD COLUMN recorded_at TEXT;

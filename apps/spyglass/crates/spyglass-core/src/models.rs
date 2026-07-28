@@ -33,6 +33,12 @@ pub struct Clip {
     pub duration_sec: Option<f64>,
     pub frame_rate: Option<f64>,
     pub ingested_at: String,
+    /// Real-world capture date (ffprobe `creation_time`, or mtime fallback)
+    /// -- see migration 012's doc comment. `None` until a probe succeeds
+    /// (at scan time, or via `db::backfill_recorded_at` for older rows);
+    /// sort-by-date SQL falls back to `ingested_at` via `COALESCE` when
+    /// this is unset.
+    pub recorded_at: Option<String>,
 }
 
 /// A clip row not yet assigned an id (insert input).
@@ -43,6 +49,7 @@ pub struct NewClip {
     pub checksum: Option<String>,
     pub size_bytes: Option<i64>,
     pub duration_sec: Option<f64>,
+    pub recorded_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

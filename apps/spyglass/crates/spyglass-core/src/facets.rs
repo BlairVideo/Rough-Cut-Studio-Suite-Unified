@@ -221,10 +221,23 @@ pub fn matching_shot_ids(conn: &Connection, filters: &FacetFilters) -> rusqlite:
 /// `NewestFirst`, its own long-standing default (Section 13). Every branch
 /// is a fixed, closed-enum literal (never interpolated user input), so
 /// building the clause by string match is safe.
+///
+/// `NewestFirst`/`OldestFirst` order by `COALESCE(c.recorded_at,
+/// c.ingested_at)`, not `ingested_at` alone -- `recorded_at` (migration
+/// 012) is the file's real capture date (ffprobe `creation_time`, or
+/// mtime), while `ingested_at` only records when Spyglass happened to
+/// scan the file. A bulk-imported archive gets every clip's `ingested_at`
+/// clustered into the same short scan window regardless of when the
+/// footage was actually shot, which made "newest/oldest" look
+/// unordered -- confirmed against the Suite's real archive (2 years of
+/// footage, ~24 hours of ingestion). `COALESCE` falls back to
+/// `ingested_at` for any clip a probe hasn't reached yet (older rows
+/// before `db::backfill_recorded_at` runs, or one whose file was offline
+/// at scan time).
 fn browse_order_by_clause(sort_by: SortBy) -> &'static str {
     match sort_by {
-        SortBy::Relevance | SortBy::NewestFirst => "c.ingested_at DESC, s.id DESC",
-        SortBy::OldestFirst => "c.ingested_at ASC, s.id ASC",
+        SortBy::Relevance | SortBy::NewestFirst => "COALESCE(c.recorded_at, c.ingested_at) DESC, s.id DESC",
+        SortBy::OldestFirst => "COALESCE(c.recorded_at, c.ingested_at) ASC, s.id ASC",
         SortBy::HighestQuality => "s.technical_quality_score IS NULL, s.technical_quality_score DESC, s.id DESC",
         SortBy::MostEnergy => "s.energy_score IS NULL, s.energy_score DESC, s.id DESC",
     }
@@ -286,7 +299,14 @@ mod tests {
     fn insert_clip(conn: &Connection, path: &str, source_app: SourceApp) -> i64 {
         db::upsert_clip(
             conn,
-            &NewClip { file_path: path.to_string(), source_app, checksum: None, size_bytes: None, duration_sec: None },
+            &NewClip {
+                file_path: path.to_string(),
+                source_app,
+                checksum: None,
+                size_bytes: None,
+                duration_sec: None,
+                recorded_at: None,
+            },
         )
         .unwrap()
         .id

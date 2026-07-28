@@ -270,6 +270,18 @@ struct ConsolidateEstimatePy {
     destination_has_existing_files: bool,
 }
 
+#[derive(Serialize)]
+struct RecordedAtBackfillResultPy {
+    updated: usize,
+    skipped: usize,
+}
+
+impl From<::spyglass_core::db::RecordedAtBackfillResult> for RecordedAtBackfillResultPy {
+    fn from(r: ::spyglass_core::db::RecordedAtBackfillResult) -> Self {
+        RecordedAtBackfillResultPy { updated: r.updated, skipped: r.skipped }
+    }
+}
+
 // ---------------- Tag correction / favoriting ----------------
 
 #[pyfunction]
@@ -308,6 +320,31 @@ fn purge_onscreen_text_tags() -> PyResult<usize> {
     let state = state()?;
     let conn = state.db.conn.lock().map_err(to_py_err)?;
     ::spyglass_core::db::purge_bad_tags(&conn).map_err(to_py_err)
+}
+
+/// Retroactive repair for clips registered before `recorded_at` existed
+/// (or scanned while its probe failed): re-probes every clip still
+/// missing it and fills the column in -- see
+/// `spyglass_core::db::backfill_recorded_at`'s doc comment for why this
+/// matters (`SortBy::NewestFirst`/`OldestFirst` need a real capture date,
+/// not just the scan-time `ingested_at` every bulk-imported clip shares).
+/// Runs with the GIL released (`py.allow_threads`), same rationale as
+/// `scan_watched_root`: this probes real files on disk (ffprobe subprocess
+/// + a stat call per clip), potentially thousands of them on a large
+/// archive. The Suite's own caller wraps this in a background thread job
+/// for progress UX (see spyglass_bridge.py), same convention as
+/// `spyglass_scan_watched_root`.
+#[pyfunction]
+fn backfill_recorded_at(py: Python<'_>) -> PyResult<PyObject> {
+    let state = state()?;
+    let result: RecordedAtBackfillResultPy = py
+        .allow_threads(|| -> Result<_, String> {
+            let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
+            ::spyglass_core::db::backfill_recorded_at(&conn).map_err(|e| e.to_string())
+        })
+        .map_err(PyRuntimeError::new_err)?
+        .into();
+    pythonize(py, &result).map_err(to_py_err).map(|b| b.into())
 }
 
 // ---------------- Pool tray ----------------
@@ -764,6 +801,7 @@ fn spyglass_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(remove_tag, m)?)?;
     m.add_function(wrap_pyfunction!(set_shot_favorite, m)?)?;
     m.add_function(wrap_pyfunction!(purge_onscreen_text_tags, m)?)?;
+    m.add_function(wrap_pyfunction!(backfill_recorded_at, m)?)?;
     m.add_function(wrap_pyfunction!(get_pool, m)?)?;
     m.add_function(wrap_pyfunction!(add_shot_to_pool, m)?)?;
     m.add_function(wrap_pyfunction!(remove_shot_from_pool, m)?)?;

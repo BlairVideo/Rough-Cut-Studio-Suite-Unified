@@ -153,6 +153,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -183,6 +184,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -213,6 +215,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -245,6 +248,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -277,6 +281,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -314,6 +319,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -327,6 +333,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();

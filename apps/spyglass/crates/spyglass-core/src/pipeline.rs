@@ -382,6 +382,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -447,6 +448,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -508,6 +510,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -546,6 +549,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -593,6 +597,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -637,6 +642,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -679,6 +685,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -760,6 +767,7 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();

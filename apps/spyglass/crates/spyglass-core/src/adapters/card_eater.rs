@@ -121,6 +121,7 @@ impl From<CardEaterCopiedFile> for NewClip {
             checksum: f.checksum,
             size_bytes: f.size_bytes,
             duration_sec: None,
+            recorded_at: None,
         }
     }
 }

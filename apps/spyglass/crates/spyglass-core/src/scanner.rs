@@ -401,9 +401,16 @@ pub fn scan_and_register(db: &Db, root_path: &Path, extensions: &[String]) -> ru
             continue;
         }
 
-        // Deliberately outside the lock -- see doc comment above.
+        // Deliberately outside the lock -- see doc comment above. ffprobe's
+        // `creation_time` tag (or an mtime fallback) is a metadata-only
+        // read, cheap enough to do inline here rather than waiting on
+        // gap-fill's much slower cv2/CLIP pass -- see ffprobe::
+        // recorded_at_for_file's doc comment for why this exists at all
+        // (sort-by-date previously used `ingested_at`, meaningless for a
+        // bulk-imported archive).
         let size_bytes = std::fs::metadata(&path).ok().map(|m| m.len() as i64);
         let checksum = compute_checksum(&path).ok();
+        let recorded_at = crate::ffprobe::recorded_at_for_file(&path);
 
         let conn = db.conn.lock().unwrap();
 
@@ -431,6 +438,7 @@ pub fn scan_and_register(db: &Db, root_path: &Path, extensions: &[String]) -> ru
                 checksum,
                 size_bytes,
                 duration_sec: None,
+                recorded_at,
             },
         )?;
         db::enqueue_gap_fill_job_for_clip(&tx, clip.id)?;

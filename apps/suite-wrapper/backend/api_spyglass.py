@@ -196,6 +196,33 @@ class SpyglassMixin:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
+    def spyglass_backfill_recorded_at(self, label=None):
+        """One-off repair for clips registered before `recorded_at` existed:
+        re-probes every clip still missing a real capture date (ffprobe
+        `creation_time`, or mtime) and fills it in, so "Newest first"/
+        "Oldest first" reflect actual footage dates instead of the scan-time
+        `ingested_at` every bulk-imported clip otherwise shares -- see
+        spyglass_bridge.backfill_recorded_at's docstring. Routed through the
+        Jobs drawer (thread job) rather than a direct blocking call: an
+        archive-wide pass shells out to ffprobe once per still-missing clip,
+        which for a few thousand clips is genuinely slow, same UX reasoning
+        as spyglass_scan_watched_root. Safe to re-run any time (e.g. after
+        reconnecting a drive that was offline during an earlier pass)."""
+        try:
+            def run(progress_cb, cancel_event):
+                progress_cb(0, "Backfilling capture dates…")
+                result = spyglass_bridge.backfill_recorded_at()
+                progress_cb(100, "Done")
+                return result
+
+            job_id = self.jobs.start_thread_job(
+                kind="spyglass_backfill_recorded_at", label=label or "Backfill capture dates", fn=run
+            )
+            return {"ok": True, "job_id": job_id}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
     # =====================================================================
     # Pool tray
     # =====================================================================

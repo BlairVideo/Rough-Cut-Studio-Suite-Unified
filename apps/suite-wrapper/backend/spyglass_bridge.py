@@ -28,6 +28,7 @@ whether the engine itself is reached from a Tauri command or this bridge.
 
 import base64
 import mimetypes
+import os
 import traceback
 
 try:
@@ -119,19 +120,53 @@ def _attach_keyframe_data_uris(results):
     return results
 
 
+def _offline_root_dirs():
+    """Watched-root paths whose backing volume isn't currently mounted, per
+    `list_watched_roots`'s own `is_online` (`Path::exists()`, computed fresh
+    on every call -- see spyglass-py/src/lib.rs). Normalized + `os.sep`-
+    suffixed so prefix matching in `_is_under_offline_root` can't conflate
+    sibling roots with a shared string prefix (e.g. "/Volumes/DriveA" vs.
+    "/Volumes/DriveA2")."""
+    return [
+        os.path.normpath(root["path"]) + os.sep
+        for root in _spyglass_core.list_watched_roots()
+        if not root.get("is_online", True)
+    ]
+
+
+def _is_under_offline_root(file_path, offline_root_dirs):
+    normalized = os.path.normpath(file_path) + os.sep
+    return any(normalized.startswith(root_dir) for root_dir in offline_root_dirs)
+
+
+def _filter_offline_results(results):
+    """Drops shots whose clip lives under a watched root that's currently
+    unreachable (drive unplugged) -- there's no watched_root_id FK on
+    `clips`/`shots` (see spyglass-core's schema), so membership is inferred
+    by path prefix, same as the Rust scanner does for its own root-removal
+    cascade (`path_is_under_any`)."""
+    offline_root_dirs = _offline_root_dirs()
+    if not offline_root_dirs:
+        return results
+    return [r for r in results if not _is_under_offline_root(r.get("clip_file_path", ""), offline_root_dirs)]
+
+
 def search_shots(query, filters, limit=None):
     ensure_initialized()
-    return _attach_keyframe_data_uris(_spyglass_core.search_shots(query, filters or {}, limit))
+    results = _filter_offline_results(_spyglass_core.search_shots(query, filters or {}, limit))
+    return _attach_keyframe_data_uris(results)
 
 
 def browse_shots(filters, limit=None):
     ensure_initialized()
-    return _attach_keyframe_data_uris(_spyglass_core.browse_shots(filters or {}, limit))
+    results = _filter_offline_results(_spyglass_core.browse_shots(filters or {}, limit))
+    return _attach_keyframe_data_uris(results)
 
 
 def find_similar_shots(shot_id):
     ensure_initialized()
-    return _attach_keyframe_data_uris(_spyglass_core.find_similar_shots(int(shot_id)))
+    results = _filter_offline_results(_spyglass_core.find_similar_shots(int(shot_id)))
+    return _attach_keyframe_data_uris(results)
 
 
 def list_facet_options():
@@ -146,7 +181,8 @@ def list_folder_children(parent_path=None):
 
 def list_favorite_shots():
     ensure_initialized()
-    return _attach_keyframe_data_uris(_spyglass_core.list_favorite_shots())
+    results = _filter_offline_results(_spyglass_core.list_favorite_shots())
+    return _attach_keyframe_data_uris(results)
 
 
 # ---------------- Tag correction / favoriting ----------------
@@ -169,6 +205,18 @@ def set_shot_favorite(shot_id, favorite):
 def purge_onscreen_text_tags():
     ensure_initialized()
     return _spyglass_core.purge_onscreen_text_tags()
+
+
+def backfill_recorded_at():
+    """One-off repair for clips registered before `recorded_at` existed (or
+    scanned while its ffprobe/mtime probe failed): re-probes every clip
+    still missing it and fills the column in, so `SortBy::NewestFirst`/
+    `OldestFirst` reflect real footage capture dates instead of falling
+    back to `ingested_at` (scan time) for the whole archive -- see
+    spyglass_core::db::backfill_recorded_at's doc comment. Safe to re-run;
+    never touches a clip that already has a `recorded_at`."""
+    ensure_initialized()
+    return _spyglass_core.backfill_recorded_at()
 
 
 # ---------------- Pool tray ----------------

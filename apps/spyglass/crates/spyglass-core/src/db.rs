@@ -29,6 +29,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../migrations/009_add_caption_hub_score.sql")),
         M::up(include_str!("../migrations/010_add_shot_favorite.sql")),
         M::up(include_str!("../migrations/011_add_alias_links.sql")),
+        M::up(include_str!("../migrations/012_add_clip_recorded_at.sql")),
     ])
 }
 
@@ -81,11 +82,12 @@ fn row_to_clip(row: &rusqlite::Row) -> rusqlite::Result<Clip> {
         duration_sec: row.get(5)?,
         ingested_at: row.get(6)?,
         frame_rate: row.get(7)?,
+        recorded_at: row.get(8)?,
     })
 }
 
 const CLIP_COLUMNS: &str =
-    "id, file_path, source_app, checksum, size_bytes, duration_sec, ingested_at, frame_rate";
+    "id, file_path, source_app, checksum, size_bytes, duration_sec, ingested_at, frame_rate, recorded_at";
 
 /// Inserts a clip if `file_path` isn't already registered; otherwise leaves
 /// the existing row untouched and returns it. This is the dedup contract
@@ -93,8 +95,8 @@ const CLIP_COLUMNS: &str =
 /// adapter or the scanner has already created for the same path.
 pub fn upsert_clip(conn: &Connection, new_clip: &NewClip) -> rusqlite::Result<Clip> {
     conn.execute(
-        "INSERT INTO clips (file_path, source_app, checksum, size_bytes, duration_sec)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO clips (file_path, source_app, checksum, size_bytes, duration_sec, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(file_path) DO NOTHING",
         params![
             new_clip.file_path,
@@ -102,6 +104,7 @@ pub fn upsert_clip(conn: &Connection, new_clip: &NewClip) -> rusqlite::Result<Cl
             new_clip.checksum,
             new_clip.size_bytes,
             new_clip.duration_sec,
+            new_clip.recorded_at,
         ],
     )?;
     let sql = format!("SELECT {CLIP_COLUMNS} FROM clips WHERE file_path = ?1");
@@ -228,6 +231,45 @@ pub fn purge_onscreen_text_tags(conn: &Connection) -> rusqlite::Result<usize> {
         conn.execute("DELETE FROM tags WHERE id = ?1", params![id])?;
     }
     Ok(removed)
+}
+
+/// Count of clips a `backfill_recorded_at` pass actually updated vs. left
+/// alone -- `skipped` is expected to be nonzero on a real archive (a
+/// watched root's drive offline at backfill time, or a file ffprobe can't
+/// open), not a failure signal by itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RecordedAtBackfillResult {
+    pub updated: usize,
+    pub skipped: usize,
+}
+
+/// One-off repair for clips registered before migration 012 (or scanned
+/// while `recorded_at`'s probe failed): re-probes every clip still missing
+/// it via `ffprobe::recorded_at_for_file` and fills the column in. Purely
+/// additive -- never touches a clip that already has a `recorded_at`, so
+/// it's safe to re-run any time (e.g. after reconnecting a drive that was
+/// offline during an earlier pass). Not wrapped in a single transaction:
+/// this walks real files on disk (potentially thousands, on slow/network
+/// volumes), and a mid-run interruption should keep whatever it already
+/// found rather than roll all of it back.
+pub fn backfill_recorded_at(conn: &Connection) -> rusqlite::Result<RecordedAtBackfillResult> {
+    let candidates: Vec<(i64, String)> = {
+        let mut stmt = conn.prepare("SELECT id, file_path FROM clips WHERE recorded_at IS NULL")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        rows.collect::<Result<_, _>>()?
+    };
+
+    let mut result = RecordedAtBackfillResult::default();
+    for (id, file_path) in candidates {
+        match crate::ffprobe::recorded_at_for_file(Path::new(&file_path)) {
+            Some(recorded_at) => {
+                conn.execute("UPDATE clips SET recorded_at = ?2 WHERE id = ?1", params![id, recorded_at])?;
+                result.updated += 1;
+            }
+            None => result.skipped += 1,
+        }
+    }
+    Ok(result)
 }
 
 /// Retroactive cleanup for tags generated before `TAGS_PROMPT`
@@ -1189,6 +1231,7 @@ mod tests {
             checksum: Some("abc123".to_string()),
             size_bytes: Some(1000),
             duration_sec: None,
+            recorded_at: None,
         };
         let first = upsert_clip(&conn, &new_clip).unwrap();
         let second = upsert_clip(&conn, &new_clip).unwrap();
@@ -1212,6 +1255,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1280,6 +1324,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1291,6 +1336,7 @@ mod tests {
                 checksum: None,
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1635,6 +1681,7 @@ mod tests {
                 checksum: Some("blake3-abc123".to_string()),
                 size_bytes: None,
                 duration_sec: None,
+                recorded_at: None,
             },
         )
         .unwrap();
@@ -1691,6 +1738,7 @@ mod tests {
             checksum: None,
             size_bytes: None,
             duration_sec: None,
+            recorded_at: None,
         }
     }
 
