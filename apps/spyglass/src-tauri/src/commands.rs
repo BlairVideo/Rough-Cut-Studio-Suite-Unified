@@ -1,6 +1,6 @@
 use spyglass_core::adapters::{broll_analyzer, card_eater, transcriber};
 use spyglass_core::models::{
-    AccessLevel, GapFillProgress, NewClip, NewWatchedRoot, SourceApp, TranscriptSearchResult, WatchedRoot,
+    AccessLevel, GapFillProgress, NewClip, NewWatchedRoot, SourceApp, WatchedRoot,
 };
 use spyglass_core::{db, scanner};
 use spyglass_engine::EngineState;
@@ -405,16 +405,6 @@ pub async fn scan_broll_cache(app: AppHandle, root_path: String) -> Result<ScanR
 // Gap-fill queue (Phase 2: progress, retry, pause/resume -- Section 7)
 // ---------------------------------------------------------------------------
 
-/// Re-checks for any clip lacking shots and not already tracked, queuing it
-/// -- exposed as its own command for a manual "check for untouched footage"
-/// action, on top of the automatic enqueue that already runs after each
-/// scan above.
-#[tauri::command]
-pub fn enqueue_gap_fill(state: State<Arc<EngineState>>) -> Result<usize, String> {
-    let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
-    db::enqueue_pending_gap_fill_jobs(&conn).map_err(|e| e.to_string())
-}
-
 /// Resets `failed` jobs back to `pending`, optionally scoped to one root
 /// (Section 7's "retry failed" action). Returns how many were requeued.
 #[tauri::command]
@@ -491,14 +481,8 @@ pub fn get_background_work_status(state: State<Arc<EngineState>>) -> BackgroundW
 }
 
 // ---------------------------------------------------------------------------
-// Search (Phase 1: transcript keyword search; Phase 3: hybrid shot search)
+// Search (Phase 3: hybrid shot search)
 // ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn search_transcripts(state: State<Arc<EngineState>>, query: String) -> Result<Vec<TranscriptSearchResult>, String> {
-    let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
-    db::search_transcripts(&conn, &query, 50).map_err(|e| e.to_string())
-}
 
 /// Natural-language shot search (Section 12): embeds `query` via the
 /// persistent CLIP text-embedding server (started lazily on first use, and
@@ -968,10 +952,7 @@ pub fn rebuild_search_index_cmd(state: State<Arc<EngineState>>) -> Result<(), St
 #[tauri::command]
 pub fn purge_bad_tags(state: State<Arc<EngineState>>) -> Result<usize, String> {
     let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
-    let onscreen_text = spyglass_core::db::purge_onscreen_text_tags(&conn).map_err(|e| e.to_string())?;
-    let ui_text = spyglass_core::db::purge_ui_text_tags(&conn).map_err(|e| e.to_string())?;
-    let gender = spyglass_core::db::purge_gender_tags(&conn).map_err(|e| e.to_string())?;
-    Ok(onscreen_text + ui_text + gender)
+    db::purge_bad_tags(&conn).map_err(|e| e.to_string())
 }
 
 /// Retroactive repair for clips indexed before `sidecar/analyze_clip.py`'s

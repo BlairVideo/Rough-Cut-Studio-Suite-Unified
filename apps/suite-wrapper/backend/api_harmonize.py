@@ -217,7 +217,7 @@ class HarmonizeMixin:
                 "reference_note": (
                     "Reference audio isn't included — Resolve can't link an audio-only "
                     "FCPXML asset. Add it manually after import, or run "
-                    "Harmonizer/prototype/add_reference_audio.py."
+                    "apps/harmonizer/backend/add_reference_audio.py."
                 ),
             }
         except Exception as e:

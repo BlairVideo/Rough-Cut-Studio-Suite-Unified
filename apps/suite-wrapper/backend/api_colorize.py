@@ -123,6 +123,20 @@ class ColorizeMixin:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
+    def colorize_forget_preview(self, path):
+        """Drops `path`'s preview token once its clip is removed from the
+        project -- mirrors Rough Cut Studio's own SourceManager.remove_source
+        (apps/rough-cut-studio/backend/sources.py), which calls
+        preview_server.forget() for the same reason: without this, a
+        removed clip's media stays servable via its old loopback URL for
+        the rest of the process's life."""
+        try:
+            colorize_bridge.forget_preview(path)
+            return {"ok": True}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
     # =====================================================================
     # LUT library
     # =====================================================================

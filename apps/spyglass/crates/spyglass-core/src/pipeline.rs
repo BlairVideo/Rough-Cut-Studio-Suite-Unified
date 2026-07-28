@@ -270,13 +270,18 @@ pub fn write_gap_fill_result(
 
 /// Shells out to the sidecar and waits for its result -- the slow part of
 /// gap-fill (up to `DEFAULT_SIDECAR_TIMEOUT`) -- without touching the
-/// database at all. Split out from `run_gap_fill_for_clip` so a caller
+/// database at all. Kept separate from `write_gap_fill_result` so a caller
 /// juggling the app's single shared `Connection` (Section 19: one process,
 /// one writer, no pool) can run this *before* taking the lock, rather than
 /// holding it for the subprocess's entire lifetime. Every other command
 /// that needs the connection -- including a "Scan now" click and the next
 /// worker's job claim -- would otherwise queue up behind whichever clip is
-/// currently being analyzed.
+/// currently being analyzed. `gap_fill_worker.rs`'s worker loop follows
+/// exactly this split (via a persistent `AnalyzeWorker` sidecar rather than
+/// `SidecarCommand` directly, then a separate `write_gap_fill_result` call);
+/// this crate's own tests exercise the same two-step shape via
+/// `SidecarCommand`, which is what lets them inject cheap fixture scripts
+/// instead of the real `analyze_clip.py`.
 pub fn run_sidecar_for_clip(
     clip: &Clip,
     sidecar: &SidecarCommand,
@@ -287,30 +292,6 @@ pub fn run_sidecar_for_clip(
     let keyframe_dir = keyframe_cache_root.join(clip.id.to_string());
     let output = run_sidecar(sidecar, Path::new(&clip.file_path), &keyframe_dir, timeout, cancel)?;
     Ok((keyframe_dir, output))
-}
-
-/// Runs the full gap-fill pass for one clip: shell out to the sidecar,
-/// then persist whatever shots/embeddings come back. Does not touch the
-/// job-queue row itself -- callers (the worker loop) decide how to record
-/// success/failure against `gap_fill_jobs`.
-///
-/// Callers that share one `Connection` across the whole app (the worker
-/// loop) should prefer calling `run_sidecar_for_clip` and `write_gap_fill_
-/// result` separately instead, taking the lock only for the latter -- this
-/// combined form holds `conn`'s lock for the sidecar's full runtime, which
-/// is fine for tests and single-threaded callers but would stall every
-/// other command in a running app.
-pub fn run_gap_fill_for_clip(
-    conn: &Connection,
-    clip: &Clip,
-    sidecar: &SidecarCommand,
-    keyframe_cache_root: &Path,
-    broll_entry: Option<&BrollClipEntry>,
-    timeout: Duration,
-    cancel: Option<&CancelToken>,
-) -> Result<usize, PipelineError> {
-    let (keyframe_dir, output) = run_sidecar_for_clip(clip, sidecar, keyframe_cache_root, timeout, cancel)?;
-    write_gap_fill_result(conn, clip, &keyframe_dir, &output, broll_entry).map_err(PipelineError::from)
 }
 
 #[cfg(test)]
@@ -362,6 +343,25 @@ print(json.dumps({{"duration_sec": 12.0, "frame_rate": 29.97, "shots": shots}}))
 
     fn python3() -> String {
         "python3".to_string()
+    }
+
+    /// Test-only convenience: drives the same two production functions the
+    /// real worker loop composes (`run_sidecar_for_clip` then
+    /// `write_gap_fill_result` -- see `gap_fill_worker.rs`'s doc comment)
+    /// as a single call, so these tests read like the old combined
+    /// `run_gap_fill_for_clip` did without that combinator needing to
+    /// exist as production API surface it no longer has a caller for.
+    fn run_gap_fill_for_clip(
+        conn: &Connection,
+        clip: &Clip,
+        sidecar: &SidecarCommand,
+        keyframe_cache_root: &Path,
+        broll_entry: Option<&BrollClipEntry>,
+        timeout: Duration,
+        cancel: Option<&CancelToken>,
+    ) -> Result<usize, PipelineError> {
+        let (keyframe_dir, output) = run_sidecar_for_clip(clip, sidecar, keyframe_cache_root, timeout, cancel)?;
+        write_gap_fill_result(conn, clip, &keyframe_dir, &output, broll_entry).map_err(PipelineError::from)
     }
 
     #[test]

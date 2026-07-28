@@ -319,6 +319,21 @@ pub fn purge_ui_text_tags(conn: &Connection) -> rusqlite::Result<usize> {
     Ok(removed)
 }
 
+/// Runs all three retroactive bad-tag purges (`purge_onscreen_text_tags`,
+/// `purge_ui_text_tags`, `purge_gender_tags`) and sums the total removed --
+/// hoisted here because both hosts (`src-tauri/src/commands.rs`'s
+/// `purge_bad_tags` and `crates/spyglass-py/src/lib.rs`'s
+/// `purge_onscreen_text_tags` pyfunction) were independently composing the
+/// exact same three-call sequence under two different names. See each
+/// individual purge function's own doc comment for its specific rationale
+/// and scope limits.
+pub fn purge_bad_tags(conn: &Connection) -> rusqlite::Result<usize> {
+    let onscreen_text = purge_onscreen_text_tags(conn)?;
+    let ui_text = purge_ui_text_tags(conn)?;
+    let gender = purge_gender_tags(conn)?;
+    Ok(onscreen_text + ui_text + gender)
+}
+
 // ---------------------------------------------------------------------------
 // Clip favoriting -- a quick bookmark distinct from the pool tray
 // ---------------------------------------------------------------------------
@@ -457,10 +472,9 @@ pub fn list_visible_watched_roots(conn: &Connection) -> rusqlite::Result<Vec<Wat
 /// Paths of every root a user has explicitly removed (Section 8), with no
 /// regard for any other root's current state. Prefer
 /// `effectively_removed_watched_root_paths` for actually gating clip
-/// registration -- this raw list is exposed for callers (e.g. the
-/// Settings UI) that need the removed roots themselves, not the exclusion
-/// decision derived from them.
-pub fn removed_watched_root_paths(conn: &Connection) -> rusqlite::Result<Vec<String>> {
+/// registration -- this raw list is the primitive that function is defined
+/// against, not something any host currently calls directly.
+pub(crate) fn removed_watched_root_paths(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT path FROM watched_roots WHERE access_level = 'removed'")?;
     let rows = stmt.query_map([], |row| row.get(0))?;
     rows.collect()

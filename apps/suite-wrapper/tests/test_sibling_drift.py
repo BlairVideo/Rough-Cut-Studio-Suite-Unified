@@ -89,3 +89,49 @@ def test_brander_logo_placements_match_standalone_app(brander_source):
         (f"bridge LOGO_PLACEMENTS {brander_bridge.LOGO_PLACEMENTS} no longer "
          f"matches Brander app.py's inline list(s): {placements_lists}")
     assert brander_bridge.DEFAULT_LOGO_PLACEMENT in brander_bridge.LOGO_PLACEMENTS
+
+
+def test_no_module_basename_collides_across_sibling_dirs_on_sys_path():
+    """Four sibling dirs sit on `sys.path` simultaneously in-process (see
+    api_shared.py/brander_bridge.py/colorize_bridge.py/harmonizer_bridge.py's
+    `sys.path.insert` calls). No basenames collide today, but nothing stops
+    a future addition (e.g. colorize's project.py/grade.py/lut.py vs.
+    blair-brander's export.py/assets.py/timeline.py -- all generic enough
+    names) from silently shadowing a sibling's module instead of failing
+    loudly. This guards importability, not just constant values (the tests
+    above only check that mirrored constants agree)."""
+    sibling_dirs = {
+        "rcs": paths.RCS_BACKEND_DIR,
+        "brander": paths.BRANDER_DIR,
+        "colorize": paths.COLORIZE_DIR,
+        "harmonizer": paths.HARMONIZER_BACKEND_DIR,
+    }
+
+    basenames_by_dir = {}
+    for label, dir_path in sibling_dirs.items():
+        if not os.path.isdir(dir_path):
+            continue  # e.g. a sibling app not present on this checkout
+        basenames_by_dir[label] = {
+            fname[:-3]
+            for fname in os.listdir(dir_path)
+            if fname.endswith(".py")
+            # conftest.py is pytest's own auto-discovery convention, not a
+            # module any sibling bridge bare-imports -- collisions there
+            # are not a shadowing risk.
+            and fname != "conftest.py"
+        }
+
+    seen = {}
+    collisions = []
+    for label, basenames in basenames_by_dir.items():
+        for name in basenames:
+            if name in seen:
+                collisions.append(f"{name}.py in both {seen[name]!r} and {label!r}")
+            else:
+                seen[name] = label
+
+    assert not collisions, (
+        "module basename collides across dirs simultaneously on sys.path -- "
+        "whichever is inserted last will silently shadow the other's import "
+        "instead of failing:\n  " + "\n  ".join(collisions)
+    )

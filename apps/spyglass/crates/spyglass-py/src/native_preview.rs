@@ -23,15 +23,15 @@
 
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSBitmapImageFileType, NSView};
+use objc2_app_kit::NSView;
 use objc2_av_foundation::AVPlayer;
 use objc2_av_kit::AVPlayerView;
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_core_media::CMTime;
-use objc2_foundation::NSDictionary;
 use objc2_foundation::NSURL;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
+use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 
 struct ActivePreview {
@@ -46,6 +46,20 @@ struct ActivePreview {
 unsafe impl Send for ActivePreview {}
 
 static ACTIVE_PREVIEW: Mutex<Option<ActivePreview>> = Mutex::new(None);
+
+/// Forward-buffered cushion given to the preview player -- see
+/// `src-tauri/src/native_video_preview.rs`'s copy of this same const for
+/// the full rationale (watched-root footage on a slow archival/external
+/// volume needs more headroom than AVFoundation's network-streaming-tuned
+/// default of 0).
+const PREFERRED_FORWARD_BUFFER_SEC: f64 = 8.0;
+
+/// The gap-fill queue's manual-pause flag as it was *before* a preview
+/// session auto-paused it -- `None` while no preview is open. Mirrors
+/// `NativePreviewState::paused_before_preview` in the Tauri shell (a
+/// `static` here rather than an `AppHandle`-managed field, since this
+/// module has no equivalent app-state container to hang it off of).
+static PAUSED_BEFORE_PREVIEW: Mutex<Option<bool>> = Mutex::new(None);
 
 fn main_thread_marker() -> PyResult<MainThreadMarker> {
     MainThreadMarker::new().ok_or_else(|| {
@@ -92,6 +106,24 @@ fn open_native_video_preview(view_ptr: usize, path: String, start_tc: f64, x: f6
         return Err(PyRuntimeError::new_err(format!("couldn't build a file URL from {path}")));
     };
 
+    // Pause background gap-fill for the duration of the preview, same
+    // rationale as the Tauri shell's copy of this logic -- those jobs
+    // read source clip files too, and contending with them for the same
+    // slow external/archival drive is a common source of preview stutter
+    // unrelated to the preview file itself. Only capture+pause on the
+    // *first* open of a session (a shot-switch that replaces an
+    // already-active preview must not re-capture "already paused" as the
+    // value to restore to). Best-effort: if the engine isn't initialized
+    // yet, skip the pause rather than failing the whole preview open --
+    // this module has no hard dependency on the engine otherwise.
+    if let Ok(engine_state) = crate::state() {
+        let mut prior = PAUSED_BEFORE_PREVIEW.lock().unwrap();
+        if prior.is_none() {
+            *prior = Some(engine_state.queue_control.paused.load(Ordering::Relaxed));
+            engine_state.queue_control.paused.store(true, Ordering::Relaxed);
+        }
+    }
+
     unsafe {
         let webview_view: &NSView = &*(view_ptr as *const NSView);
 
@@ -106,58 +138,14 @@ fn open_native_video_preview(view_ptr: usize, path: String, start_tc: f64, x: f6
         player_view.setFrame(CGRect::new(CGPoint::new(x, y), CGSize::new(width, height)));
         webview_view.addSubview(&player_view);
 
+        if let Some(item) = player.currentItem() {
+            item.setPreferredForwardBufferDuration(PREFERRED_FORWARD_BUFFER_SEC);
+        }
+
         player.seekToTime(CMTime::with_seconds(start_tc, 600));
         player.play();
 
         *ACTIVE_PREVIEW.lock().unwrap() = Some(ActivePreview { view: player_view, player });
-    }
-    Ok(())
-}
-
-/// Diagnostic only (Phase 4 verification, not part of the real surface):
-/// the active preview's real `AVPlayer` state -- `(rate, status_code,
-/// has_error)`, where `status_code` is `AVPlayerStatus` (0=unknown,
-/// 1=readyToPlay, 2=failed) and `rate > 0.0` means it is actually
-/// playing, not just that `play()` was called without erroring.
-#[pyfunction]
-fn debug_player_status() -> PyResult<(f64, i64, bool)> {
-    let _mtm = main_thread_marker()?;
-    let guard = ACTIVE_PREVIEW.lock().unwrap();
-    let Some(active) = guard.as_ref() else {
-        return Err(PyRuntimeError::new_err("no active preview"));
-    };
-    unsafe {
-        let rate = active.player.rate() as f64;
-        let status = active.player.status().0 as i64;
-        let has_error = active.player.error().is_some();
-        Ok((rate, status, has_error))
-    }
-}
-
-/// Diagnostic only (Phase 4 verification): captures the active preview
-/// view's actual rendered pixels to a PNG file -- real visual evidence
-/// of whether the embedded AVPlayerView is showing clean video or
-/// corruption, rather than just "no error was raised."
-#[pyfunction]
-fn debug_capture_preview_png(output_path: String) -> PyResult<()> {
-    let _mtm = main_thread_marker()?;
-    let guard = ACTIVE_PREVIEW.lock().unwrap();
-    let Some(active) = guard.as_ref() else {
-        return Err(PyRuntimeError::new_err("no active preview to capture"));
-    };
-    unsafe {
-        let view: &NSView = &active.view;
-        let frame = view.frame();
-        let Some(bitmap) = view.bitmapImageRepForCachingDisplayInRect(frame) else {
-            return Err(PyRuntimeError::new_err("bitmapImageRepForCachingDisplayInRect returned None"));
-        };
-        view.cacheDisplayInRect_toBitmapImageRep(frame, &bitmap);
-        let props = NSDictionary::new();
-        let Some(data) = bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &props) else {
-            return Err(PyRuntimeError::new_err("representationUsingType_properties (PNG) returned None"));
-        };
-        let bytes = data.to_vec();
-        std::fs::write(&output_path, bytes).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     }
     Ok(())
 }
@@ -172,6 +160,13 @@ fn close_native_video_preview() -> PyResult<()> {
             active.view.removeFromSuperview();
         }
     }
+
+    let prior_paused = PAUSED_BEFORE_PREVIEW.lock().unwrap().take();
+    if let Some(prior_paused) = prior_paused {
+        if let Ok(engine_state) = crate::state() {
+            engine_state.queue_control.paused.store(prior_paused, Ordering::Relaxed);
+        }
+    }
     Ok(())
 }
 
@@ -179,7 +174,5 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(debug_webview_frame, m)?)?;
     m.add_function(wrap_pyfunction!(open_native_video_preview, m)?)?;
     m.add_function(wrap_pyfunction!(close_native_video_preview, m)?)?;
-    m.add_function(wrap_pyfunction!(debug_player_status, m)?)?;
-    m.add_function(wrap_pyfunction!(debug_capture_preview_png, m)?)?;
     Ok(())
 }

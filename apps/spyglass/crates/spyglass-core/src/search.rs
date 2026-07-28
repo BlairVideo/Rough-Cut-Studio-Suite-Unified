@@ -1250,12 +1250,18 @@ mod tests {
         )
         .unwrap();
 
+        // Drives the same two production functions the real worker loop
+        // composes (`run_sidecar_for_clip` then `write_gap_fill_result` --
+        // see `gap_fill_worker.rs`'s doc comment), rather than the
+        // production-dead single-call combinator this test used to go
+        // through.
         let sidecar = SidecarCommand::real(&sidecar_dir);
-        pipeline::run_gap_fill_for_clip(
-            &conn, &clip, &sidecar, &dir.join("keyframes"), None,
+        let (keyframe_dir, output) = pipeline::run_sidecar_for_clip(
+            &clip, &sidecar, &dir.join("keyframes"),
             std::time::Duration::from_secs(120), None,
         )
         .unwrap();
+        pipeline::write_gap_fill_result(&conn, &clip, &keyframe_dir, &output, None).unwrap();
 
         // Whatever the VLM actually captioned this shot, use one of its own
         // real tags (if any) as the query -- proves the loop is closed

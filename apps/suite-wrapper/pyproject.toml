@@ -8,8 +8,10 @@ dependencies = [
     "requests==2.34.2",
     "Pillow==12.3.0",
     "keyring==25.7.0",
-    # fast multithreaded hashing for card-eater's copy verification (bridged
-    # in-process, not a subprocess worker -- see apps/card-eater in Phase 2)
+    # fast multithreaded hashing for CardEater's copy verification (the
+    # in-suite port -- backend/api_cardeater.py + backend/cardeater_*.py --
+    # bridged in-process, not a subprocess worker; the standalone
+    # apps/card-eater app no longer exists in this repo)
     "blake3==1.0.9",
     "rcs-utils",
 ]

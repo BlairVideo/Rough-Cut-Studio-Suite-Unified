@@ -477,15 +477,6 @@ pub fn manifest_to_xmeml_clips(manifest: &[ManifestEntry]) -> Vec<crate::xmeml::
         .collect()
 }
 
-/// A clip's real audio format, resolved via `ffprobe::probe_audio_format_or_fallback` --
-/// re-exported here purely so callers building a `ConsolidateClip` plan
-/// don't need to import both modules for one call. Not otherwise used by
-/// this module's own logic (the manifest doesn't need audio format; only
-/// the XMEML exporter does).
-pub fn probe_clip_audio_format(file_path: &str) -> AudioFormat {
-    crate::ffprobe::probe_audio_format_or_fallback(Path::new(file_path))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

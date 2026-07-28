@@ -1005,7 +1005,8 @@ void main() {
   function removeClip(id) {
     const idx = CZ.project.clips.findIndex((c) => c.id === id);
     if (idx < 0) return;
-    CZ.project.clips.splice(idx, 1);
+    const [removed] = CZ.project.clips.splice(idx, 1);
+    if (removed.source_path) call("colorize_forget_preview", removed.source_path);
     CZ.selected.delete(id);
     GRADE_HISTORY.delete(id);
     CZ.project.clips.forEach((c, i) => { c.order = i; });
@@ -1021,7 +1022,10 @@ void main() {
   function clearAllClips() {
     if (!CZ.project.clips.length) return;
     if (!confirm(`Remove all ${CZ.project.clips.length} clip(s) from this project?`)) return;
-    CZ.project.clips.forEach((c) => GRADE_HISTORY.delete(c.id));
+    CZ.project.clips.forEach((c) => {
+      GRADE_HISTORY.delete(c.id);
+      if (c.source_path) call("colorize_forget_preview", c.source_path);
+    });
     CZ.project.clips = [];
     CZ.selected.clear();
     resetPreviewToEmpty();

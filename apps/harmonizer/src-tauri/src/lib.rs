@@ -4,16 +4,34 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-fn prototype_dir() -> PathBuf {
-    // CARGO_MANIFEST_DIR is .../Harmonizer/app/src-tauri at build time.
+/// Dev-tree-relative resolution only (mirrors `apps/spyglass/src-tauri/src/paths.rs`'s
+/// `debug_assertions` branch) -- a packaged build needs `bundle.resources` +
+/// `AppHandle` threading here, which is deferred, so this is not yet safe to
+/// call from a release binary.
+fn backend_dir() -> Result<PathBuf, String> {
+    // CARGO_MANIFEST_DIR is apps/harmonizer/src-tauri at build time; the
+    // engine lives at apps/harmonizer/backend (renamed from prototype/
+    // during the Phase 2 migration -- see migration-plan.md §6.4).
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../prototype")
+        .join("../backend")
         .canonicalize()
-        .expect("prototype/ directory not found next to app/")
+        .map_err(|e| format!("apps/harmonizer/backend/ not found next to src-tauri/: {e}"))
 }
 
+/// Prefers the shared root `.venv` (see `apps/suite-wrapper/backend/paths.py`'s
+/// `SHARED_VENV_PYTHON`) over a bare `python3`, which almost certainly lacks
+/// numpy/scipy/librosa/soundfile. Falls back to `python3` rather than
+/// erroring so a missing venv still yields a readable "failed to launch"
+/// error instead of a panic.
 fn venv_python() -> PathBuf {
-    prototype_dir().join(".venv/bin/python3")
+    // src-tauri -> harmonizer -> apps -> repo root.
+    let shared_venv_python = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../.venv/bin/python");
+    if shared_venv_python.exists() {
+        shared_venv_python
+    } else {
+        PathBuf::from("python3")
+    }
 }
 
 #[derive(Serialize)]
@@ -28,7 +46,7 @@ fn run_align(
     take_paths: Vec<String>,
     no_retime_takes: Vec<String>,
 ) -> Result<AlignResult, String> {
-    let proto = prototype_dir();
+    let proto = backend_dir()?;
     let report_path = std::env::temp_dir().join(format!("harmonizer_report_{}.json", std::process::id()));
 
     let mut cmd = Command::new(venv_python());
@@ -71,7 +89,7 @@ fn run_import_to_resolve(
     project_name: Option<String>,
     timeline_name: Option<String>,
 ) -> Result<ImportResult, String> {
-    let proto = prototype_dir();
+    let proto = backend_dir()?;
 
     let mut cmd = Command::new(venv_python());
     cmd.arg(proto.join("import_to_resolve.py"))
@@ -109,7 +127,7 @@ fn run_recompute_segments(
     take: String,
     points: Vec<AnchorPoint>,
 ) -> Result<Value, String> {
-    let proto = prototype_dir();
+    let proto = backend_dir()?;
     let points_path = std::env::temp_dir().join(format!("harmonizer_points_{}.json", std::process::id()));
     let points_json = serde_json::to_string(&points).map_err(|e| e.to_string())?;
     std::fs::write(&points_path, points_json).map_err(|e| format!("failed to write points file: {e}"))?;
@@ -144,4 +162,36 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Regression test for the panic this repo shipped for a while:
+    // `backend_dir()` used to point at `apps/prototype` (a pre-migration
+    // path the Phase 2 migration renamed to `apps/harmonizer/backend`),
+    // which doesn't exist, so `.canonicalize().expect(...)` crashed every
+    // one of this crate's three Tauri commands on first use.
+    #[test]
+    fn backend_dir_resolves_to_the_real_engine_directory() {
+        let dir = backend_dir().expect("apps/harmonizer/backend/ should resolve from src-tauri/");
+        assert!(
+            dir.join("align.py").is_file(),
+            "expected {dir:?} to contain align.py -- backend_dir() is pointing at the wrong directory"
+        );
+    }
+
+    #[test]
+    fn venv_python_is_either_the_shared_venv_or_a_python3_fallback() {
+        let python = venv_python();
+        let is_shared_venv = python
+            .to_string_lossy()
+            .ends_with(".venv/bin/python");
+        let is_fallback = python == PathBuf::from("python3");
+        assert!(
+            is_shared_venv || is_fallback,
+            "venv_python() returned {python:?}, expected the shared root .venv or a python3 fallback"
+        );
+    }
 }

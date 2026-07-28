@@ -1,31 +1,5 @@
 export type SourceApp = "card_eater" | "spyglass_scan";
 
-export interface Clip {
-  id: number;
-  file_path: string;
-  source_app: SourceApp;
-  checksum: string | null;
-  size_bytes: number | null;
-  duration_sec: number | null;
-  ingested_at: string;
-}
-
-export interface TranscriptSegment {
-  id: number;
-  clip_id: number;
-  start_tc: number;
-  end_tc: number;
-  speaker: string | null;
-  text: string;
-  avg_logprob: number | null;
-  no_speech_prob: number | null;
-}
-
-export interface TranscriptSearchResult {
-  segment: TranscriptSegment;
-  clip_file_path: string;
-}
-
 export type AccessLevel = "active" | "paused" | "removed";
 
 export interface WatchedRoot {

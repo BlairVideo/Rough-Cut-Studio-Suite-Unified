@@ -144,11 +144,6 @@ def list_folder_children(parent_path=None):
     return _spyglass_core.list_folder_children(parent_path)
 
 
-def search_transcripts(query):
-    ensure_initialized()
-    return _spyglass_core.search_transcripts(query)
-
-
 def list_favorite_shots():
     ensure_initialized()
     return _attach_keyframe_data_uris(_spyglass_core.list_favorite_shots())
@@ -251,11 +246,6 @@ def scan_watched_root(root_id):
 
 
 # ---------------- Gap-fill queue ----------------
-
-def enqueue_gap_fill():
-    ensure_initialized()
-    return _spyglass_core.enqueue_gap_fill()
-
 
 def retry_failed_jobs(root_id=None):
     ensure_initialized()

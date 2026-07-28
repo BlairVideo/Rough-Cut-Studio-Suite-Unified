@@ -58,8 +58,8 @@ SHARED_VENV_PYTHON = os.path.join(REPO_ROOT, ".venv", "bin", "python")
 IVT_PYTHON = SHARED_VENV_PYTHON
 BROLL_PYTHON = SHARED_VENV_PYTHON
 ASYNC_PYTHON = SHARED_VENV_PYTHON
-# Only meaningful once Phase 2 adds apps/harmonizer/backend's own deps
-# (numpy, scipy, librosa, soundfile) to the shared workspace.
+# apps/harmonizer/backend's own deps (numpy, scipy, librosa, soundfile)
+# are resolved into the shared workspace venv, same as every other member.
 HARMONIZER_PYTHON = SHARED_VENV_PYTHON
 
 # Suite-owned directories.

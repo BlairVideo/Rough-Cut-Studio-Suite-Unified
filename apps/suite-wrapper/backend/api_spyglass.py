@@ -139,14 +139,6 @@ class SpyglassMixin:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
-    def spyglass_search_transcripts(self, query):
-        try:
-            results = spyglass_bridge.search_transcripts(query or "")
-            return {"ok": True, "results": results}
-        except Exception as e:
-            traceback.print_exc()
-            return {"ok": False, "error": str(e)}
-
     def spyglass_list_favorites(self):
         try:
             results = spyglass_bridge.list_favorite_shots()
@@ -406,13 +398,6 @@ class SpyglassMixin:
     # =====================================================================
     # Gap-fill queue
     # =====================================================================
-
-    def spyglass_enqueue_gap_fill(self):
-        try:
-            return {"ok": True, "count": spyglass_bridge.enqueue_gap_fill()}
-        except Exception as e:
-            traceback.print_exc()
-            return {"ok": False, "error": str(e)}
 
     def spyglass_retry_failed_jobs(self, root_id=None):
         try:

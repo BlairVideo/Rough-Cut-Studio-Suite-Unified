@@ -22,7 +22,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -88,13 +87,11 @@ pub fn run() {
             commands::scan_card_eater,
             commands::scan_transcriber_sidecars,
             commands::scan_broll_cache,
-            commands::enqueue_gap_fill,
             commands::retry_failed_jobs,
             commands::set_queue_paused,
             commands::get_queue_paused,
             commands::force_gap_fill_now,
             commands::get_background_work_status,
-            commands::search_transcripts,
             commands::search_shots,
             commands::find_similar_shots,
             commands::add_tag,

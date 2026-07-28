@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ScanResult,
   ShotSearchResult,
-  TranscriptSearchResult,
   WatchedRoot,
   WatchedRootStatus,
   AccessLevel,
@@ -46,8 +45,6 @@ export const api = {
 
   scanBrollCache: (rootPath: string) => invoke<ScanResult>("scan_broll_cache", { rootPath }),
 
-  enqueueGapFill: () => invoke<number>("enqueue_gap_fill"),
-
   retryFailedJobs: (rootId?: number) => invoke<number>("retry_failed_jobs", { rootId: rootId ?? null }),
 
   setQueuePaused: (paused: boolean) => invoke<void>("set_queue_paused", { paused }),
@@ -57,8 +54,6 @@ export const api = {
   forceGapFillNow: () => invoke<void>("force_gap_fill_now"),
 
   getBackgroundWorkStatus: () => invoke<BackgroundWorkStatus>("get_background_work_status"),
-
-  searchTranscripts: (query: string) => invoke<TranscriptSearchResult[]>("search_transcripts", { query }),
 
   searchShots: (query: string, filters: FacetFilters) => invoke<ShotSearchResult[]>("search_shots", { query, filters }),
 

@@ -125,11 +125,12 @@ When building, refactoring, or running the media suite:
 # Coding Rules — Version Standards
 - TypeScript/Node side (`harmonizer` and `spyglass`, the suite's two Tauri apps): React
   `19.1.0`, Vite `^7.0.4`, TypeScript `~5.8.3`, TailwindCSS `^4.3.3` (via `@tailwindcss/vite`),
-  Tauri 2 (`@tauri-apps/api ^2`, `@tauri-apps/cli ^2`). `harmonizer` pins
-  `@tauri-apps/plugin-dialog ^2.7.2`; `spyglass` currently pins `^2.7.1`, plus
-  `@tauri-apps/plugin-opener ^2` and `zustand ^5.0.14` for state, which `harmonizer` doesn't use.
-  Worth converging the dialog-plugin pin next time either app's dependencies are touched — don't
-  assume they're already aligned.
+  Tauri 2 (`@tauri-apps/api ^2`, `@tauri-apps/cli ^2`). Both apps' `package.json` now pin
+  `@tauri-apps/plugin-dialog ^2.7.2`; `spyglass` also depends on `@tauri-apps/plugin-opener ^2`
+  and `zustand ^5.0.14` for state, which `harmonizer` doesn't use. The remaining dialog-plugin
+  split is on the Rust side instead: `apps/spyglass/src-tauri/Cargo.toml` pins
+  `tauri-plugin-dialog = "2.7.1"` while `harmonizer`'s Rust side uses the looser `"2"` — worth
+  converging next time either app's Cargo dependencies are touched.
 - Python side (7 Python apps + `suite-wrapper` + `harmonizer/backend` +
   `spyglass/crates/spyglass-py`): Python 3.13 (pinned via
   the repo-root `.python-version`, not just `requires-python = ">=3.13"` — left unpinned, `uv`
@@ -197,9 +198,8 @@ All apps must feel like official, native school utilities. Adhere strictly to th
   `apps/suite-wrapper`'s own test suite requires Harmonizer's backend to be present to even
   collect (`suite_api.py` imports `api_harmonize.py` unconditionally) — this was true before the
   migration too, not something introduced by it. `apps/colorize` has its own `pytest.ini` +
-  `tests/` but is **not yet** in `tools/run_tests.sh`'s hardcoded `MEMBERS` list — confirmed by
-  reading the script directly. Run its suite manually (`cd apps/colorize && uv run pytest`) until
-  that's added; don't assume `tools/run_tests.sh` covers it.
+  `tests/` and is in `tools/run_tests.sh`'s `MEMBERS` list, so it's covered by a normal run —
+  confirmed by reading the script directly.
 
 # Coding & Output Guidelines
 - No Truncation: Provide full, copy-pasteable files. Do not use "// ... rest of code here".

@@ -1,7 +1,7 @@
 [project]
 name = "harmonizer-backend"
 version = "0.1.0"
-description = "Harmonizer's real alignment/FCPXML/Resolve-integration engine (align.py, make_fcpxml.py, import_to_resolve.py, resolve_validate.py, recompute_segments.py) -- not scratch code, see ../../../migration-plan.md §6.4."
+description = "Harmonizer's real alignment/FCPXML/Resolve-integration engine (align.py, make_fcpxml.py, import_to_resolve.py, recompute_segments.py) -- not scratch code, see ../../../migration-plan.md §6.4."
 requires-python = ">=3.13"
 dependencies = [
     # Unpinned in the original prototype/requirements.txt -- left unpinned

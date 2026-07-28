@@ -1,7 +1,10 @@
 //! Background job queue worker (Section 7): pulls pending `gap_fill_jobs`
-//! rows and runs `spyglass_core::pipeline::run_gap_fill_for_clip` against
-//! them, with a configurable concurrency limit and an idle/pause gate so it
-//! never competes with an active edit for CPU/disk.
+//! rows and runs them through a persistent `AnalyzeWorker` sidecar
+//! (`AnalyzeWorker::analyze`) followed by `spyglass_core::pipeline::
+//! write_gap_fill_result`, with a configurable concurrency limit and an
+//! idle/pause gate so it never competes with an active edit for CPU/disk.
+//! (`pipeline::run_gap_fill_for_clip` combines those same two steps into
+//! one call and is kept only for tests -- see that function's doc comment.)
 //!
 //! The actual indexing logic (shelling out to the Python sidecar, writing
 //! shots/embeddings) lives in `spyglass_core::pipeline` -- this module is

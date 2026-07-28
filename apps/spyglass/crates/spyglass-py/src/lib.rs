@@ -48,7 +48,7 @@ use pyo3::prelude::*;
 use pythonize::{depythonize, pythonize};
 use ::spyglass_core::consolidate::{CopyMode, FolderStructure};
 use ::spyglass_core::facets::FacetFilters;
-use ::spyglass_core::models::{AccessLevel, GapFillProgress, ShotSearchResult, TranscriptSearchResult, WatchedRoot};
+use ::spyglass_core::models::{AccessLevel, GapFillProgress, ShotSearchResult, WatchedRoot};
 use serde::Serialize;
 use spyglass_engine::{Engine, EngineConfig, EngineState};
 use std::path::{Path, PathBuf};
@@ -62,7 +62,7 @@ use std::time::Duration;
 /// state transition to support.
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
-fn state() -> PyResult<Arc<EngineState>> {
+pub(crate) fn state() -> PyResult<Arc<EngineState>> {
     ENGINE.get().map(|e| e.state.clone()).ok_or_else(|| PyRuntimeError::new_err("call spyglass_core.init() first"))
 }
 
@@ -201,18 +201,6 @@ fn list_folder_children(py: Python<'_>, parent_path: Option<String>) -> PyResult
 }
 
 #[pyfunction]
-fn search_transcripts(py: Python<'_>, query: String) -> PyResult<PyObject> {
-    let state = state()?;
-    let results: Vec<TranscriptSearchResult> = py
-        .allow_threads(|| -> Result<Vec<TranscriptSearchResult>, String> {
-            let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
-            ::spyglass_core::db::search_transcripts(&conn, &query, 50).map_err(|e| e.to_string())
-        })
-        .map_err(PyRuntimeError::new_err)?;
-    pythonize(py, &results).map_err(to_py_err).map(|b| b.into())
-}
-
-#[pyfunction]
 fn list_favorite_shots(py: Python<'_>) -> PyResult<PyObject> {
     let state = state()?;
     let results: Vec<ShotSearchResult> = py
@@ -319,10 +307,7 @@ fn set_shot_favorite(shot_id: i64, favorite: bool) -> PyResult<()> {
 fn purge_onscreen_text_tags() -> PyResult<usize> {
     let state = state()?;
     let conn = state.db.conn.lock().map_err(to_py_err)?;
-    let onscreen_text = ::spyglass_core::db::purge_onscreen_text_tags(&conn).map_err(to_py_err)?;
-    let ui_text = ::spyglass_core::db::purge_ui_text_tags(&conn).map_err(to_py_err)?;
-    let gender = ::spyglass_core::db::purge_gender_tags(&conn).map_err(to_py_err)?;
-    Ok(onscreen_text + ui_text + gender)
+    ::spyglass_core::db::purge_bad_tags(&conn).map_err(to_py_err)
 }
 
 // ---------------- Pool tray ----------------
@@ -557,13 +542,6 @@ fn scan_watched_root(py: Python<'_>, root_id: i64) -> PyResult<PyObject> {
 // ---------------- Gap-fill queue ----------------
 
 #[pyfunction]
-fn enqueue_gap_fill() -> PyResult<usize> {
-    let state = state()?;
-    let conn = state.db.conn.lock().map_err(to_py_err)?;
-    ::spyglass_core::db::enqueue_pending_gap_fill_jobs(&conn).map_err(to_py_err)
-}
-
-#[pyfunction]
 #[pyo3(signature = (root_id=None))]
 fn retry_failed_jobs(root_id: Option<i64>) -> PyResult<usize> {
     let state = state()?;
@@ -781,7 +759,6 @@ fn spyglass_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(browse_shots, m)?)?;
     m.add_function(wrap_pyfunction!(list_facet_options, m)?)?;
     m.add_function(wrap_pyfunction!(list_folder_children, m)?)?;
-    m.add_function(wrap_pyfunction!(search_transcripts, m)?)?;
     m.add_function(wrap_pyfunction!(list_favorite_shots, m)?)?;
     m.add_function(wrap_pyfunction!(add_tag, m)?)?;
     m.add_function(wrap_pyfunction!(remove_tag, m)?)?;
@@ -801,7 +778,6 @@ fn spyglass_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(requeue_short_shot_clips, m)?)?;
     m.add_function(wrap_pyfunction!(relink_watched_root, m)?)?;
     m.add_function(wrap_pyfunction!(scan_watched_root, m)?)?;
-    m.add_function(wrap_pyfunction!(enqueue_gap_fill, m)?)?;
     m.add_function(wrap_pyfunction!(retry_failed_jobs, m)?)?;
     m.add_function(wrap_pyfunction!(set_queue_paused, m)?)?;
     m.add_function(wrap_pyfunction!(get_queue_paused, m)?)?;
