@@ -1024,6 +1024,14 @@
             <button class="suite-btn suite-btn--ghost" id="sgRequeueShortShots">Re-index short fragments</button>
             <div class="suite-hint suite-hint--tight" id="sgRequeueShortShotsResult"></div>
           </div>
+
+          <div class="suite-block">
+            <h3 class="suite-block-title">Index Backup</h3>
+            <p class="suite-hint suite-hint--tight">Back up the Search index to a file, or restore it from a previous backup. Restoring replaces every clip, tag, pool, and gap-fill row currently indexed with the backup's contents — watched-root folders and media files on disk aren't touched either way.</p>
+            <button class="suite-btn suite-btn--ghost" id="sgBackupIndex">Back up index…</button>
+            <button class="suite-btn suite-btn--ghost" id="sgRestoreIndex">Restore from backup…</button>
+            <div class="suite-hint suite-hint--tight" id="sgBackupIndexResult"></div>
+          </div>
         </div>
 
         <div class="suite-settings-pane" id="settingsPaneTranscribe" data-settings-pane="transcribe" hidden>

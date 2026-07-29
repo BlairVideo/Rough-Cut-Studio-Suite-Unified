@@ -2588,6 +2588,36 @@
       if (res.requeued > 0) { ensurePolling(); openDrawer(); }
     });
 
+    // ---- index backup / restore ----
+
+    $("sgBackupIndex").addEventListener("click", async () => {
+      const btn = $("sgBackupIndex");
+      const resultBox = $("sgBackupIndexResult");
+      btn.disabled = true;
+      const res = await call("spyglass_backup_index");
+      btn.disabled = false;
+      if (!res.ok) { toastIfError(res, "Couldn't back up the index."); return; }
+      resultBox.textContent = `Backed up to ${res.path}`;
+      toast("Index backup saved.", "ok");
+    });
+
+    $("sgRestoreIndex").addEventListener("click", async () => {
+      if (!confirm("Restore the Search index from a backup file? This replaces every clip, tag, pool, and gap-fill row currently indexed with the backup's contents. Watched-root folders and media files on disk aren't touched. This can't be undone.")) return;
+      const btn = $("sgRestoreIndex");
+      const resultBox = $("sgBackupIndexResult");
+      btn.disabled = true;
+      const res = await call("spyglass_restore_index");
+      btn.disabled = false;
+      if (!res.ok) { toastIfError(res, "Couldn't restore the index."); return; }
+      resultBox.textContent = "Index restored.";
+      toast("Index restored from backup.", "ok");
+      await loadSpyglassRoots();
+      await loadSpyglassFacets();
+      await loadSpyglassQueueStatus();
+      await loadSpyglassPool();
+      await loadSpyglassFolderTree();
+    });
+
     // ---- pool tray ----
 
     $("sgPoolList").addEventListener("click", async (e) => {

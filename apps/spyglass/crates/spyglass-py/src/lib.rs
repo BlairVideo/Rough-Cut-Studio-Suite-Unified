@@ -49,6 +49,7 @@ use pythonize::{depythonize, pythonize};
 use ::spyglass_core::consolidate::{CopyMode, FolderStructure};
 use ::spyglass_core::facets::FacetFilters;
 use ::spyglass_core::models::{AccessLevel, GapFillProgress, ShotSearchResult, WatchedRoot};
+use rusqlite::Connection;
 use serde::Serialize;
 use spyglass_engine::{Engine, EngineConfig, EngineState};
 use std::path::{Path, PathBuf};
@@ -544,6 +545,52 @@ fn relink_watched_root(py: Python<'_>, id: i64, new_path: String) -> PyResult<Py
     pythonize(py, &root).map_err(to_py_err).map(|b| b.into())
 }
 
+/// Snapshots the live index to `dest_path` via SQLite's own online backup
+/// API (`spyglass_core::maintenance::backup_database`) -- safe to run
+/// while the gap-fill worker is still writing to the live WAL-mode
+/// connection, unlike a raw file copy. `py.allow_threads` since a large
+/// archive's backup is a real (if usually sub-second) disk I/O pass, same
+/// rationale as `scan_watched_root`.
+#[pyfunction]
+fn backup_index(py: Python<'_>, dest_path: String) -> PyResult<()> {
+    let state = state()?;
+    py.allow_threads(|| {
+        let conn = state.db.conn.lock().map_err(to_py_err)?;
+        ::spyglass_core::maintenance::backup_database(&conn, Path::new(&dest_path)).map_err(to_py_err)
+    })
+}
+
+/// Validates `backup_path` and, if healthy, atomically swaps it in over
+/// the live index file (`spyglass_core::maintenance::restore_database_file`
+/// -- rejects a corrupt backup without touching the live index at all),
+/// then reopens this process's own connection against the freshly
+/// restored file. The reopen matters because `state.db.conn` was opened
+/// once at engine startup (`Db::open_at`) and a rename doesn't retarget an
+/// already-open file descriptor -- without this, the running engine would
+/// keep reading/writing the old, now-replaced file until the whole
+/// process restarted. Re-applies the same pragmas `Db::open_at` sets on
+/// first open, since this is a fresh `Connection`.
+#[pyfunction]
+fn restore_index(py: Python<'_>, backup_path: String) -> PyResult<()> {
+    let state = state()?;
+    py.allow_threads(|| {
+        let mut conn = state.db.conn.lock().map_err(to_py_err)?;
+        // No-op if the live connection isn't holding anything in its WAL
+        // sidecar; harmless either way since we're about to replace the
+        // file out from under it.
+        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+        ::spyglass_core::maintenance::restore_database_file(Path::new(&backup_path), &state.db.path)
+            .map_err(to_py_err)?;
+        let fresh = Connection::open(&state.db.path).map_err(to_py_err)?;
+        fresh.pragma_update(None, "foreign_keys", "ON").map_err(to_py_err)?;
+        fresh.pragma_update(None, "busy_timeout", 2000).map_err(to_py_err)?;
+        fresh.pragma_update(None, "journal_mode", "WAL").map_err(to_py_err)?;
+        fresh.pragma_update(None, "synchronous", "NORMAL").map_err(to_py_err)?;
+        *conn = fresh;
+        Ok(())
+    })
+}
+
 /// Walks `root_id`'s path and registers/relinks discovered media, exactly
 /// as `commands::scan_watched_root` does -- a genuinely slow (potentially
 /// multi-minute) filesystem walk + checksum pass, hence `py.allow_threads`
@@ -816,6 +863,8 @@ fn spyglass_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(requeue_short_shot_clips, m)?)?;
     m.add_function(wrap_pyfunction!(relink_watched_root, m)?)?;
     m.add_function(wrap_pyfunction!(scan_watched_root, m)?)?;
+    m.add_function(wrap_pyfunction!(backup_index, m)?)?;
+    m.add_function(wrap_pyfunction!(restore_index, m)?)?;
     m.add_function(wrap_pyfunction!(retry_failed_jobs, m)?)?;
     m.add_function(wrap_pyfunction!(set_queue_paused, m)?)?;
     m.add_function(wrap_pyfunction!(get_queue_paused, m)?)?;

@@ -293,6 +293,18 @@ def scan_watched_root(root_id):
     return _spyglass_core.scan_watched_root(int(root_id))
 
 
+# ---------------- Index backup / restore ----------------
+
+def backup_index(dest_path):
+    ensure_initialized()
+    return _spyglass_core.backup_index(dest_path)
+
+
+def restore_index(backup_path):
+    ensure_initialized()
+    return _spyglass_core.restore_index(backup_path)
+
+
 # ---------------- Gap-fill queue ----------------
 
 def retry_failed_jobs(root_id=None):

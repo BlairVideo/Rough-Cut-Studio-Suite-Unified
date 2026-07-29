@@ -42,6 +42,7 @@ view (an error opening a bad path surfaces as a real `{"ok": False}`,
 not a silently-swallowed background failure).
 """
 
+import datetime
 import os
 import threading
 import traceback
@@ -418,6 +419,72 @@ class SpyglassMixin:
 
             job_id = self.jobs.start_thread_job(kind="spyglass_scan", label=label or f"Scan root {root_id}", fn=run)
             return {"ok": True, "job_id": job_id}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
+    # =====================================================================
+    # Index backup / restore
+    # =====================================================================
+
+    def spyglass_backup_index(self):
+        """Snapshots the live Spyglass SQLite index to a file the user
+        picks via a save dialog, using SQLite's own online backup API
+        (spyglass_core::maintenance::backup_database) — safe to run while
+        the background gap-fill worker is still writing to the live
+        WAL-mode connection, unlike a raw file copy of the index file."""
+        err = self._require_window()
+        if err:
+            return err
+        default_name = "spyglass_index_backup_{}.sqlite".format(
+            datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        )
+        try:
+            result = self.window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=default_name,
+                file_types=("SQLite database (*.sqlite)", "All files (*.*)"),
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": f"Couldn't open the save dialog: {e}"}
+        dest_path = _first_path(result)
+        if not dest_path:
+            return {"ok": False, "cancelled": True}
+        try:
+            spyglass_bridge.backup_index(dest_path)
+            return {"ok": True, "path": dest_path}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
+    def spyglass_restore_index(self):
+        """Restores the live index from a backup file the user picks via
+        an open dialog. Destructive — replaces every clip/tag/pool/
+        gap-fill row currently in the index with the backup's contents.
+        The Rust side (spyglass_core::maintenance::restore_database_file)
+        validates the backup's integrity first and rejects a corrupt file
+        without touching the live index at all; the frontend is
+        responsible for confirming with the user before calling this,
+        same contract as spyglass_remove_watched_root/
+        spyglass_reset_watched_root."""
+        err = self._require_window()
+        if err:
+            return err
+        try:
+            result = self.window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=("SQLite database (*.sqlite)", "All files (*.*)"),
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": f"Couldn't open the file picker: {e}"}
+        backup_path = _first_path(result)
+        if not backup_path:
+            return {"ok": False, "cancelled": True}
+        try:
+            spyglass_bridge.restore_index(backup_path)
+            return {"ok": True}
         except Exception as e:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
