@@ -1790,6 +1790,7 @@
       return `<div class="suite-list-row" data-root-id="${r.id}">
         <span class="suite-list-row__label" title="${esc(r.path)}">${esc(r.label)} <span class="suite-list-row__meta">${meta}</span></span>
         <button type="button" class="sg-root-scan" data-root-id="${r.id}">Scan</button>
+        <button type="button" class="sg-root-relink" data-root-id="${r.id}" title="Point this watched root at its new location -- use after moving the folder from a working drive to an archive drive">Relink…</button>
         <button type="button" class="sg-root-toggle" data-root-id="${r.id}" data-access-level="${r.access_level}">${r.access_level === "paused" ? "Resume" : "Pause"}</button>
         <button type="button" class="sg-root-reset" data-root-id="${r.id}" title="Wipe this folder's indexed clips/tags/captions and rescan it from scratch -- use after a tagging pipeline fix to re-tag just this folder">Reset &amp; rescan</button>
         <button type="button" class="sg-root-remove suite-list-row__danger" data-root-id="${r.id}">Remove</button>
@@ -2486,6 +2487,24 @@
         toast(`Scanning "${root ? root.label : rootId}"…`, "ok");
         ensurePolling();
         openDrawer();
+        return;
+      }
+      const relinkBtn = e.target.closest(".sg-root-relink");
+      if (relinkBtn) {
+        const rootId = parseInt(relinkBtn.dataset.rootId, 10);
+        const root = S.spyglass.roots.find((r) => r.id === rootId);
+        const label = root ? root.label : rootId;
+        const picked = await call("spyglass_pick_watched_root_folder");
+        if (!picked.ok) { toastIfError(picked, "Couldn't open the folder dialog."); return; }
+        if (!picked.path) return;
+        const res = await call("spyglass_relink_watched_root", rootId, picked.path);
+        if (!res.ok) { toast(res.error || `Couldn't relink "${label}".`, "error"); return; }
+        toast(`Relinked "${label}" to ${picked.path} — rescanning…`, "ok");
+        const scanRes = await call("spyglass_scan_watched_root", rootId, label);
+        if (!scanRes.ok) { toast(scanRes.error || "Relinked, but couldn't start the rescan.", "error"); await loadSpyglassRoots(); return; }
+        ensurePolling();
+        openDrawer();
+        await loadSpyglassRoots();
         return;
       }
       const toggleBtn = e.target.closest(".sg-root-toggle");
