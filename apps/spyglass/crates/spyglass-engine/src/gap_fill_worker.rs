@@ -46,6 +46,13 @@ impl InFlightRegistry {
         self.tokens.lock().unwrap().remove(&clip_id);
     }
 
+    /// True when no clip is currently mid-analysis in any worker slot. Used
+    /// to decide whether a "process now" override has actually finished its
+    /// one queue-drain pass -- see the doc comment where this is called.
+    fn is_empty(&self) -> bool {
+        self.tokens.lock().unwrap().is_empty()
+    }
+
     /// Sets the cancel flag for every currently-tracked clip whose path
     /// falls under `root_path`. Returns how many were signalled.
     pub fn cancel_under_root(&self, root_path: &str, clip_paths: impl Fn(i64) -> Option<String>) -> usize {
@@ -127,12 +134,21 @@ async fn worker_loop(state: Arc<EngineState>, config: Arc<WorkerConfig>) {
 
         let claimed = claim_next(&state);
         let Some((job, clip, broll_entry)) = claimed else {
-            // Nothing left to claim -- if a "process now" override was
-            // driving the queue through the idle gate, its job is done;
-            // clear it so the worker goes back to waiting for real idle
-            // instead of continuing to bypass it (system-wide, since
-            // `claim_next_pending_job` isn't scoped to one root) forever.
-            state.queue_control.force_active.store(false, Ordering::Relaxed);
+            // Nothing left for THIS slot to claim -- but with
+            // `max_concurrency` > 1, a sibling slot can still be mid-flight
+            // on a job it claimed moments earlier (analysis can take up to
+            // `DEFAULT_SIDECAR_TIMEOUT`). Clearing the override here
+            // unconditionally used to race that sibling: this slot finds
+            // the queue momentarily empty and clears `force_active` while
+            // the other slot is still actively grinding through its own
+            // forced job, so once that job finishes and the machine is
+            // still in active use, nothing picks up whatever landed in the
+            // queue meanwhile. Only clear once every slot is actually idle
+            // (`in_flight` empty), i.e. the queue has *really* drained, not
+            // just this slot's view of it.
+            if state.in_flight.is_empty() {
+                state.queue_control.force_active.store(false, Ordering::Relaxed);
+            }
             tokio::time::sleep(POLL_INTERVAL).await;
             continue;
         };
@@ -242,5 +258,27 @@ fn claim_next(state: &EngineState) -> Option<(GapFillJob, Clip, Option<BrollClip
             let _ = db::mark_job_failed(&conn, job.id, "clip row no longer exists");
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InFlightRegistry;
+
+    #[test]
+    fn is_empty_reflects_other_slots_still_mid_analysis() {
+        let registry = InFlightRegistry::default();
+        assert!(registry.is_empty(), "a fresh registry has nothing in flight");
+
+        registry.register(1);
+        assert!(
+            !registry.is_empty(),
+            "a still-registered clip must keep the registry non-empty -- this is what a sibling \
+             worker slot checks before clearing a \"process now\" override, so a false empty \
+             here would let the override get cleared while this slot is still processing"
+        );
+
+        registry.unregister(1);
+        assert!(registry.is_empty(), "unregistering the only in-flight clip must empty the registry again");
     }
 }

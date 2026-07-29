@@ -23,6 +23,20 @@ const POLL_INTERVAL: Duration = Duration::from_secs(2);
 /// Diffs a previous/current online-state snapshot. Pure and
 /// dependency-free so it's directly unit-testable, mirroring Card Eater's
 /// own `diff_volumes` extraction.
+///
+/// A root with no prior snapshot entry (its very first observation --
+/// either just added, or this is the engine's first poll after a process
+/// restart) is treated as a transition into whatever state it's currently
+/// in, not just when that state is offline. A prior run can quit (or
+/// crash) while a root is disconnected, leaving its jobs parked in
+/// `awaiting_reconnect`; if that drive is already reconnected by the time
+/// the app is next launched, `known` starts empty and this is the only
+/// "the drive is back" signal the volume watcher will ever see for it --
+/// treating first-observation-online as a no-op left that backlog stuck
+/// forever, since nothing else calls `requeue_jobs_on_reconnect`. Firing
+/// it unconditionally is harmless for a genuinely brand-new root: that
+/// query only touches rows already `awaiting_reconnect` for the root's own
+/// path, and a fresh root has none.
 pub(crate) fn diff_online_state(
     previous: &HashMap<i64, bool>,
     current: &HashMap<i64, bool>,
@@ -30,16 +44,13 @@ pub(crate) fn diff_online_state(
     let mut newly_offline = Vec::new();
     let mut newly_online = Vec::new();
     for (&root_id, &now_online) in current {
-        match previous.get(&root_id) {
-            Some(&was_online) if was_online != now_online => {
-                if now_online {
-                    newly_online.push(root_id);
-                } else {
-                    newly_offline.push(root_id);
-                }
+        let was_online = previous.get(&root_id).copied();
+        if was_online != Some(now_online) {
+            if now_online {
+                newly_online.push(root_id);
+            } else {
+                newly_offline.push(root_id);
             }
-            None if !now_online => newly_offline.push(root_id),
-            _ => {}
         }
     }
     (newly_offline, newly_online)
@@ -137,13 +148,18 @@ mod tests {
     }
 
     #[test]
-    fn newly_added_online_root_is_not_reported_as_a_transition() {
-        // A brand-new root that's already reachable isn't a "just
-        // reconnected" event -- there's nothing to requeue for it yet.
+    fn first_observation_online_is_reported_as_newly_online() {
+        // Whether this is a brand-new root (harmless -- nothing is in
+        // `awaiting_reconnect` for it yet) or a long-standing root whose
+        // drive was already back online by the time the engine restarted
+        // (the only case that actually matters -- a prior run's backlog is
+        // stuck in `awaiting_reconnect` with no other signal to resume it),
+        // `known` starts empty either way, so this first observation must
+        // fire the reconnect requeue rather than silently skip it.
         let previous = map(&[]);
         let current = map(&[(1, true)]);
         let (offline, online) = diff_online_state(&previous, &current);
         assert!(offline.is_empty());
-        assert!(online.is_empty());
+        assert_eq!(online, vec![1]);
     }
 }
