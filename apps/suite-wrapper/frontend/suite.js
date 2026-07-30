@@ -6568,10 +6568,22 @@
       fpsEl.value = saved.fps;
       const parsed = parseFloat(saved.fps);
       if (typeof rulerFps !== "undefined" && !isNaN(parsed)) rulerFps = parsed;
+      // Setting .value alone doesn't fire "change", so RCS's own listener
+      // (app.js) that actually calls window.pywebview.api.set_fps(...)
+      // never runs -- the dropdown would show the saved fps while the
+      // backend SourceManager silently stays at its 25.0 default and every
+      // export comes out at 25fps regardless of what's shown. Dispatch the
+      // event so that call really happens, same as `diarizeEl` above.
+      fpsEl.dispatchEvent(new Event("change"));
     }
     const dfAvailable = saved.fps === "29.97" || saved.fps === "59.94";
     if (typeof updateDropFrameVisibility === "function") updateDropFrameVisibility(dfAvailable);
-    if (dropFrameEl) dropFrameEl.checked = dfAvailable && !!saved.dropFrame;
+    if (dropFrameEl) {
+      dropFrameEl.checked = dfAvailable && !!saved.dropFrame;
+      // Same issue as fps above: .checked alone never reaches the backend's
+      // set_drop_frame(...) either.
+      dropFrameEl.dispatchEvent(new Event("change"));
+    }
 
     if (saved.provider) providerEl.value = saved.provider;
     if (typeof updateProviderVisibility === "function") updateProviderVisibility();

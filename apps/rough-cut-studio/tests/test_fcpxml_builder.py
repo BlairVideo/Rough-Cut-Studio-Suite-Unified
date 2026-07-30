@@ -64,6 +64,52 @@ def test_one_asset_per_unique_source_file():
     assert clips[0].get("ref") != clips[2].get("ref")
 
 
+def test_no_source_dims_defaults_to_square_1080p():
+    xml_string, _ = build_fcpxml("Seq", fps=25.0, resolved_segments=[_seg(0)])
+    root = ET.fromstring(xml_string)
+    fmt = root.find("resources/format")
+    assert fmt.get("width") == "1920"
+    assert fmt.get("height") == "1080"
+    assert fmt.get("paspH") == "1"
+    assert fmt.get("paspV") == "1"
+
+
+def test_source_dims_used_for_sequence_format():
+    source_dims = {"/media/a.mov": {"width": 1440, "height": 1080, "par_num": 4, "par_den": 3}}
+    xml_string, _ = build_fcpxml("Seq", fps=25.0, resolved_segments=[_seg(0)], source_dims=source_dims)
+    root = ET.fromstring(xml_string)
+    fmt = root.find("resources/format")
+    assert fmt.get("width") == "1440"
+    assert fmt.get("height") == "1080"
+    assert fmt.get("paspH") == "4"
+    assert fmt.get("paspV") == "3"
+    asset = root.find("resources/asset")
+    assert asset.get("format") == fmt.get("id")
+
+
+def test_asset_with_differing_geometry_gets_its_own_format_resource():
+    segs = [
+        _seg(0, source_path="/media/a.mov", out_s=2.0),
+        _seg(1, source_path="/media/b.mov", in_s=0.0, out_s=1.0),
+    ]
+    source_dims = {
+        "/media/a.mov": {"width": 1920, "height": 1080, "par_num": 1, "par_den": 1},
+        "/media/b.mov": {"width": 720, "height": 480, "par_num": 10, "par_den": 11},
+    }
+    xml_string, _ = build_fcpxml("Seq", fps=25.0, resolved_segments=segs, source_dims=source_dims)
+    root = ET.fromstring(xml_string)
+    formats = root.findall("resources/format")
+    assert len(formats) == 2  # sequence format (a.mov's dims) + one override for b.mov
+    assets = root.findall("resources/asset")
+    a_asset = next(a for a in assets if a.find("media-rep").get("src").endswith("a.mov"))
+    b_asset = next(a for a in assets if a.find("media-rep").get("src").endswith("b.mov"))
+    assert a_asset.get("format") == formats[0].get("id")
+    b_format = next(f for f in formats if f.get("id") == b_asset.get("format"))
+    assert b_format.get("width") == "720"
+    assert b_format.get("paspH") == "10"
+    assert b_format.get("paspV") == "11"
+
+
 def test_broll_offset_is_relative_to_host_clip_not_timeline():
     # Main clip 0: [0, 5)s. Main clip 1: [5, 10)s. B-roll starts at 7s,
     # so it should be anchored to main clip 1 (the host) with an offset

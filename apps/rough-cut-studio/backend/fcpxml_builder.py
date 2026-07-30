@@ -93,6 +93,7 @@ def build_fcpxml(
     video_width: int = 1920,
     video_height: int = 1080,
     audio_sample_rate: int = 48000,
+    source_dims: dict = None,
 ):
     """
     resolved_segments: the "main" cuts, same shape as xml_builder's:
@@ -100,6 +101,17 @@ def build_fcpxml(
 
     broll_segments: optional overlays, same shape plus "timeline_start_seconds"
     and "audio_mode" ("silent" | "full" | "duck_main", default "silent").
+
+    source_dims: optional {source_path: {"width", "height", "par_num",
+    "par_den"}} map of each source file's actual probed geometry (see
+    api.py / rcs_utils.ffprobe_util.probe_video_dimensions). The
+    sequence's own <format> resource uses the first main clip's real
+    dimensions/pixel aspect ratio (written as the paspH/paspV attributes
+    FCPXML defines for this) when known, falling back to video_width/
+    video_height/square PAR otherwise -- same as before this parameter
+    existed. Any asset whose own probed geometry differs from the
+    sequence format gets its own extra <format> resource so it isn't
+    misrepresented as sharing the sequence's dimensions/PAR.
     Each is anchored (as a connected clip) to whichever main clip's
     timespan it falls within; one that falls before the first or after the
     last main clip is anchored to that nearest edge clip instead, and a
@@ -121,6 +133,7 @@ def build_fcpxml(
     resolved_segments = sorted(resolved_segments, key=lambda s: s["order"])
     broll_segments = broll_segments or []
     main_duck_db = main_duck_db or {}
+    source_dims = source_dims or {}
     warnings = []
 
     if not resolved_segments:
@@ -141,13 +154,22 @@ def build_fcpxml(
 
     format_id = "r1"
     frame_num, frame_den = _frame_duration_fraction(fps)
+
+    seq_dims = source_dims.get(resolved_segments[0]["source_path"]) or {}
+    seq_width = seq_dims.get("width", video_width)
+    seq_height = seq_dims.get("height", video_height)
+    seq_par_num = seq_dims.get("par_num", 1)
+    seq_par_den = seq_dims.get("par_den", 1)
+
     ET.SubElement(
         resources, "format",
         id=format_id,
-        name=_format_name_label(fps, video_height),
+        name=_format_name_label(fps, seq_height),
         frameDuration=f"{frame_num}/{frame_den}s",
-        width=str(video_width),
-        height=str(video_height),
+        width=str(seq_width),
+        height=str(seq_height),
+        paspH=str(seq_par_num),
+        paspV=str(seq_par_den),
     )
 
     all_segments_for_assets = resolved_segments + broll_segments
@@ -164,6 +186,27 @@ def build_fcpxml(
         asset_id_by_path[path] = asset_id
         display_name = os.path.basename(path)
         asset_duration = _seconds_to_fcp_time(max_out + 1.0, fps)  # small safety buffer
+
+        # Reuse the sequence's own format when this source's real geometry
+        # matches it (the common case, and the only case before source_dims
+        # existed); otherwise give it its own format resource so playback
+        # isn't stretched/squeezed to the sequence's dimensions/PAR.
+        asset_format_id = format_id
+        dims = source_dims.get(path)
+        if dims and (dims.get("width") != seq_width or dims.get("height") != seq_height
+                     or dims.get("par_num", 1) != seq_par_num or dims.get("par_den", 1) != seq_par_den):
+            asset_format_id = f"fmt-{_uid()[:8]}"
+            ET.SubElement(
+                resources, "format",
+                id=asset_format_id,
+                name=_format_name_label(fps, dims["height"]),
+                frameDuration=f"{frame_num}/{frame_den}s",
+                width=str(dims["width"]),
+                height=str(dims["height"]),
+                paspH=str(dims.get("par_num", 1)),
+                paspV=str(dims.get("par_den", 1)),
+            )
+
         asset = ET.SubElement(
             resources, "asset",
             id=asset_id,
@@ -172,7 +215,7 @@ def build_fcpxml(
             start="0s",
             duration=asset_duration,
             hasVideo="1",
-            format=format_id,
+            format=asset_format_id,
             videoSources="1",
             hasAudio="1",
             audioSources="1",

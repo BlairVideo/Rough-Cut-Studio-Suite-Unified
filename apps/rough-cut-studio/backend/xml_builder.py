@@ -40,6 +40,15 @@ import xml.dom.minidom as minidom
 
 STEREO_CHANNELS = 2
 
+# Apple's FCP7/XMEML spec defines a fixed enum for <pixelaspectratio> --
+# there's no free-form numeric option -- of which these are the two
+# broadcast-SD non-square presets this app is likely to actually see
+# (NTSC/PAL DV). (ratio, tolerance, label)
+_XMEML_PAR_PRESETS = (
+    (10 / 11, 0.005, "NTSC-601"),
+    (59 / 54, 0.005, "PAL-601"),
+)
+
 
 def _uid():
     return uuid.uuid4().hex[:16].upper()
@@ -52,6 +61,30 @@ def _rate_elem(parent, fps: float):
     timebase.text = str(round(fps))
     ntsc_el = ET.SubElement(rate, "ntsc")
     ntsc_el.text = "TRUE" if ntsc else "FALSE"
+
+
+def _par_label(par_num: int, par_den: int):
+    """Maps a raw PAR fraction to one of XMEML's fixed pixelaspectratio
+    enum values. Anything that doesn't match a known non-square preset
+    within tolerance falls back to "square" rather than guessing --
+    an unrecognized value risks Premiere rejecting or misreading the
+    sequence, no worse than writing nothing at all, and this covers the
+    common broadcast-SD case correctly."""
+    if par_num <= 0 or par_den <= 0:
+        return "square", False
+    ratio = par_num / par_den
+    if abs(ratio - 1.0) < 0.01:
+        return "square", False
+    for target_ratio, tolerance, label in _XMEML_PAR_PRESETS:
+        if abs(ratio - target_ratio) < tolerance:
+            return label, True
+    return "square", False
+
+
+def _pixel_aspect_elems(parent, par_num: int, par_den: int):
+    label, anamorphic = _par_label(par_num, par_den)
+    ET.SubElement(parent, "anamorphic").text = "TRUE" if anamorphic else "FALSE"
+    ET.SubElement(parent, "pixelaspectratio").text = label
 
 
 def _db_to_amplitude(db: float) -> float:
@@ -82,12 +115,33 @@ def build_premiere_xml(
     video_height: int = 1080,
     audio_sample_rate: int = 48000,
     audio_depth: int = 16,
+    source_dims: dict = None,
 ):
-    """Returns (xml_string, warnings_list)."""
+    """Returns (xml_string, warnings_list).
+
+    `source_dims` is an optional {source_path: {"width", "height",
+    "par_num", "par_den"}} map of each source file's *actual* probed
+    geometry (see api.py, which fills this in via
+    rcs_utils.ffprobe_util.probe_video_dimensions). When a source_path
+    isn't in the map (unlinked media, probing failed, or the caller
+    passed nothing), its <file> falls back to the video_width/
+    video_height/square-PAR defaults below -- same behavior as before
+    this parameter existed. The sequence's own format uses the first
+    main clip's real dimensions when known, since that's what Premiere
+    itself derives a new sequence's settings from.
+    """
     resolved_segments = sorted(resolved_segments, key=lambda s: s["order"])
     broll_segments = broll_segments or []
     main_duck_db = main_duck_db or {}
+    source_dims = source_dims or {}
     warnings = []
+
+    seq_dims = source_dims.get(resolved_segments[0]["source_path"]) if resolved_segments else None
+    seq_dims = seq_dims or {}
+    seq_width = seq_dims.get("width", video_width)
+    seq_height = seq_dims.get("height", video_height)
+    seq_par_num = seq_dims.get("par_num", 1)
+    seq_par_den = seq_dims.get("par_den", 1)
 
     xmeml = ET.Element("xmeml", version="5")
     sequence = ET.SubElement(xmeml, "sequence", id=f"sequence-{_uid()}")
@@ -101,8 +155,9 @@ def build_premiere_xml(
     video_format = ET.SubElement(video, "format")
     vsc = ET.SubElement(video_format, "samplecharacteristics")
     _rate_elem(vsc, fps)
-    ET.SubElement(vsc, "width").text = str(video_width)
-    ET.SubElement(vsc, "height").text = str(video_height)
+    ET.SubElement(vsc, "width").text = str(seq_width)
+    ET.SubElement(vsc, "height").text = str(seq_height)
+    _pixel_aspect_elems(vsc, seq_par_num, seq_par_den)
     video_track = ET.SubElement(video, "track")
 
     audio = ET.SubElement(media, "audio")
@@ -147,8 +202,11 @@ def build_premiere_xml(
         ET.SubElement(v_clip, "out").text = str(out_frames)
 
         if is_new_file:
+            file_dims = source_dims.get(source_path) or {}
             _build_file_element(v_clip, file_id, clip_name, source_path, fps,
-                                 video_width, video_height,
+                                 file_dims.get("width", video_width),
+                                 file_dims.get("height", video_height),
+                                 file_dims.get("par_num", 1), file_dims.get("par_den", 1),
                                  audio_sample_rate, audio_depth)
         else:
             ET.SubElement(v_clip, "file", id=file_id)
@@ -258,8 +316,11 @@ def build_premiere_xml(
             ET.SubElement(clip, "out").text = str(out_frames)
 
             if is_new_file:
+                file_dims = source_dims.get(source_path) or {}
                 _build_file_element(clip, file_id, seg.get("source_name", "B-Roll"), source_path, fps,
-                                     video_width, video_height,
+                                     file_dims.get("width", video_width),
+                                     file_dims.get("height", video_height),
+                                     file_dims.get("par_num", 1), file_dims.get("par_den", 1),
                                      audio_sample_rate, audio_depth)
             else:
                 ET.SubElement(clip, "file", id=file_id)
@@ -328,7 +389,7 @@ def _add_audio_channel_clip(track_el, clip_id, file_id, clip_name, fps,
 
 
 def _build_file_element(parent, file_id, clip_name, source_path, fps,
-                         video_width, video_height,
+                         video_width, video_height, par_num, par_den,
                          audio_sample_rate, audio_depth):
     file_el = ET.SubElement(parent, "file", id=file_id)
     ET.SubElement(file_el, "name").text = clip_name
@@ -340,6 +401,7 @@ def _build_file_element(parent, file_id, clip_name, source_path, fps,
     fvchar = ET.SubElement(fvideo, "samplecharacteristics")
     ET.SubElement(fvchar, "width").text = str(video_width)
     ET.SubElement(fvchar, "height").text = str(video_height)
+    _pixel_aspect_elems(fvchar, par_num, par_den)
 
     faudio = ET.SubElement(fmedia, "audio")
     fachar = ET.SubElement(faudio, "samplecharacteristics")

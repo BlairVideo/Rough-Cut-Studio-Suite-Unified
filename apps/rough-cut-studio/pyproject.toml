@@ -6,7 +6,11 @@ requires-python = ">=3.13"
 dependencies = [
     "pywebview==6.2.1",
     "requests==2.34.2",
+    "rcs-utils",
 ]
+
+[tool.uv.sources]
+rcs-utils = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest"]

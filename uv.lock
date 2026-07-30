@@ -3079,6 +3079,7 @@ version = "0.1.0"
 source = { virtual = "apps/rough-cut-studio" }
 dependencies = [
     { name = "pywebview" },
+    { name = "rcs-utils" },
     { name = "requests" },
 ]
 
@@ -3090,6 +3091,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pywebview", specifier = "==6.2.1" },
+    { name = "rcs-utils", editable = "packages/utils" },
     { name = "requests", specifier = "==2.34.2" },
 ]
 

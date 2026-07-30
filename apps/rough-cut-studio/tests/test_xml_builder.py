@@ -102,6 +102,68 @@ def test_clips_are_placed_in_order_regardless_of_input_order():
     assert starts == [0, 50]  # first clip (order 0) is 2s == 50 frames at 25fps
 
 
+def test_no_source_dims_defaults_to_square_1080p():
+    xml_string, _ = build_premiere_xml("Seq", fps=25.0, resolved_segments=[_seg(0)])
+    root = ET.fromstring(xml_string)
+    seq_char = root.find("sequence/media/video/format/samplecharacteristics")
+    assert seq_char.find("width").text == "1920"
+    assert seq_char.find("height").text == "1080"
+    assert seq_char.find("pixelaspectratio").text == "square"
+    assert seq_char.find("anamorphic").text == "FALSE"
+    file_char = root.find("sequence/media/video/track/clipitem/file/media/video/samplecharacteristics")
+    assert file_char.find("pixelaspectratio").text == "square"
+
+
+def test_source_dims_used_for_sequence_and_file_geometry():
+    source_dims = {"/media/a.mov": {"width": 720, "height": 480, "par_num": 10, "par_den": 11}}
+    xml_string, _ = build_premiere_xml(
+        "Seq", fps=25.0, resolved_segments=[_seg(0)], source_dims=source_dims,
+    )
+    root = ET.fromstring(xml_string)
+    seq_char = root.find("sequence/media/video/format/samplecharacteristics")
+    assert seq_char.find("width").text == "720"
+    assert seq_char.find("height").text == "480"
+    assert seq_char.find("pixelaspectratio").text == "NTSC-601"
+    assert seq_char.find("anamorphic").text == "TRUE"
+    file_char = root.find("sequence/media/video/track/clipitem/file/media/video/samplecharacteristics")
+    assert file_char.find("width").text == "720"
+    assert file_char.find("pixelaspectratio").text == "NTSC-601"
+
+
+def test_source_dims_per_file_not_global():
+    # Two sources with different real geometry -- each <file> must reflect
+    # its own dimensions/PAR, not whichever source happened to seed the
+    # sequence-level defaults.
+    segs = [
+        _seg(0, source_path="/media/a.mov", out_s=2.0),
+        _seg(1, source_path="/media/b.mov", in_s=0.0, out_s=1.0),
+    ]
+    source_dims = {
+        "/media/a.mov": {"width": 1920, "height": 1080, "par_num": 1, "par_den": 1},
+        "/media/b.mov": {"width": 1440, "height": 1080, "par_num": 4, "par_den": 3},
+    }
+    xml_string, _ = build_premiere_xml("Seq", fps=25.0, resolved_segments=segs, source_dims=source_dims)
+    root = ET.fromstring(xml_string)
+    file_elements = [c.find("file") for c in root.findall("sequence/media/video/track/clipitem")]
+    a_char = file_elements[0].find("media/video/samplecharacteristics")
+    b_char = file_elements[1].find("media/video/samplecharacteristics")
+    assert a_char.find("width").text == "1920"
+    assert a_char.find("pixelaspectratio").text == "square"
+    assert b_char.find("width").text == "1440"
+    # 4:3 isn't one of XMEML's known non-square presets -- falls back to
+    # "square" rather than guessing an unsupported enum value.
+    assert b_char.find("pixelaspectratio").text == "square"
+
+
+def test_unrecognized_par_falls_back_to_square_not_a_guess():
+    source_dims = {"/media/a.mov": {"width": 2000, "height": 1080, "par_num": 3, "par_den": 2}}
+    xml_string, _ = build_premiere_xml("Seq", fps=25.0, resolved_segments=[_seg(0)], source_dims=source_dims)
+    root = ET.fromstring(xml_string)
+    seq_char = root.find("sequence/media/video/format/samplecharacteristics")
+    assert seq_char.find("pixelaspectratio").text == "square"
+    assert seq_char.find("anamorphic").text == "FALSE"
+
+
 def test_non_overlapping_broll_shares_single_extra_track_no_warning():
     main = [_seg(0, out_s=10.0)]
     broll = [

@@ -124,6 +124,38 @@ def probe_video_fps(path: str, timeout: float = 15) -> Optional[float]:
         return None
 
 
+def probe_video_dimensions(path: str, timeout: float = 15) -> Optional[dict]:
+    """Coded width/height and pixel aspect ratio (ffprobe's
+    `sample_aspect_ratio`, i.e. PAR -- not the display aspect ratio) from
+    stream 0, or None if unavailable. PAR defaults to 1:1 (square) when
+    ffprobe reports "0:1" or omits the field, which is the correct
+    reading for the vast majority of modern (non-anamorphic) footage."""
+    try:
+        data = probe_json(path, timeout, select_streams="v:0",
+                           show_entries="stream=width,height,sample_aspect_ratio")
+        streams = data.get("streams") or []
+        if not streams:
+            return None
+        stream = streams[0]
+        width = int(stream.get("width") or 0)
+        height = int(stream.get("height") or 0)
+        if not width or not height:
+            return None
+        par_num, par_den = 1, 1
+        raw_sar = stream.get("sample_aspect_ratio")
+        if raw_sar and raw_sar != "0:1":
+            num_str, _, den_str = raw_sar.partition(":")
+            try:
+                n, d = int(num_str), int(den_str)
+                if n > 0 and d > 0:
+                    par_num, par_den = n, d
+            except ValueError:
+                pass
+        return {"width": width, "height": height, "par_num": par_num, "par_den": par_den}
+    except Exception:
+        return None
+
+
 def probe_audio_format(path: str, timeout: float = 15) -> Optional[dict]:
     """{'channels', 'sample_rate', 'sample_fmt', 'channel_layout'} for the
     first audio stream (a:0), or None if there's no audio stream or ffprobe

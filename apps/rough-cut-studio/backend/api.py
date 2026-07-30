@@ -56,6 +56,7 @@ from llama_client import (
 from xml_builder import build_premiere_xml
 from fcpxml_builder import build_fcpxml
 from otio_builder import build_otio
+from rcs_utils.ffprobe_util import probe_video_dimensions
 from script_writer import build_script_markdown
 from thumbnails import ffmpeg_available
 from video_export import build_preview_export
@@ -279,7 +280,38 @@ class Api:
         return self._sources_mgr.remove_source(source_id)
 
     def set_fps(self, fps):
-        return self._sources_mgr.set_fps(fps)
+        result = self._sources_mgr.set_fps(fps)
+        if not result.get("ok") or not self.last_result:
+            return result
+        # A cut already exists -- without this, save_xml/save_fcpxml/
+        # save_otio (below) keep handing out the export string generated at
+        # the OLD frame rate, since changing fps alone never touched
+        # self.last_result. Re-finalize the last resolved cut list at the
+        # new fps so a subsequent Save immediately reflects the change,
+        # instead of silently exporting stale bytes until the user happens
+        # to click Apply Changes/Build again on the Cuts tab.
+        if not self._generation_lock.acquire(blocking=False):
+            result["warnings"] = (result.get("warnings") or []) + [
+                "A generation or revision is in progress — the current export wasn't "
+                "refreshed for the new frame rate yet. Rebuild it from the Cuts tab once "
+                "that finishes."
+            ]
+            return result
+        try:
+            resolved = [dict(s) for s in self.last_result.get("resolved_segments", [])]
+            for seg in resolved:
+                seg["source_name"] = self._display_clip_name(seg["source_id"])
+            outputs = self._finalize_outputs(
+                self.last_result["sequence_name"],
+                self.last_result.get("narrative_summary", ""),
+                resolved,
+                target_seconds=self.last_result.get("target_seconds"),
+                history_label=f"Frame rate changed to {self.fps:g}fps",
+            )
+            result["warnings"] = (result.get("warnings") or []) + outputs.get("warnings", [])
+        finally:
+            self._generation_lock.release()
+        return result
 
     def set_drop_frame(self, enabled):
         return self._sources_mgr.set_drop_frame(enabled)
@@ -726,6 +758,25 @@ class Api:
         outputs["warnings"] = problems + outputs.get("warnings", [])
         return outputs
 
+    def _probe_source_dims(self, xml_segments: list) -> dict:
+        """Probes each unique real, on-disk source file referenced by
+        `xml_segments` for its actual width/height/pixel-aspect-ratio, so
+        the XMEML/FCPXML exports can stop assuming every source is
+        square-pixel 1920x1080 (see xml_builder.py/fcpxml_builder.py's
+        `source_dims` parameter). A source_path that doesn't exist on disk
+        (unlinked media -- xml_segments then holds a placeholder name, not
+        a real path) is skipped rather than handed to ffprobe, and any
+        source ffprobe can't read is fail-open just omitted -- the callers
+        already fall back to sane defaults for anything missing from this
+        map."""
+        dims_by_path = {}
+        for seg in xml_segments:
+            path = seg["source_path"]
+            if path in dims_by_path or not os.path.exists(path):
+                continue
+            dims_by_path[path] = probe_video_dimensions(path) or None
+        return {path: dims for path, dims in dims_by_path.items() if dims}
+
     def _finalize_outputs(self, sequence_name: str, narrative_summary: str, resolved: list,
                            target_seconds=None, history_label: str = "Updated"):
         """Builds the script + XML from a resolved segment list and caches
@@ -827,10 +878,14 @@ class Api:
                     existing = main_duck_db.get(m["order"])
                     main_duck_db[m["order"]] = duck_db if existing is None else min(existing, duck_db)
 
+        source_dims = self._probe_source_dims(xml_segments + xml_broll_segments)
+
         xml_str, xmeml_warnings = build_premiere_xml(sequence_name, self.fps, xml_segments,
-                                                      broll_segments=xml_broll_segments, main_duck_db=main_duck_db)
+                                                      broll_segments=xml_broll_segments, main_duck_db=main_duck_db,
+                                                      source_dims=source_dims)
         fcpxml_str, fcpxml_warnings = build_fcpxml(sequence_name, self.fps, xml_segments,
-                                                    broll_segments=xml_broll_segments, main_duck_db=main_duck_db)
+                                                    broll_segments=xml_broll_segments, main_duck_db=main_duck_db,
+                                                    source_dims=source_dims)
         otio_str, otio_warnings = build_otio(sequence_name, self.fps, xml_segments,
                                               broll_segments=xml_broll_segments)
 
