@@ -696,9 +696,27 @@ def _score_clip(result: ClipResult, window_sec: float = 4.0,
             j += 1
         if count > 0:
             avg = window_sum / count
-            candidates.append((avg, i, j - 1))
+            candidates.append((avg, i, j - 1, count))
         window_sum -= scores[i]
         count -= 1
+
+    # Windows starting near the very end of the clip run out of samples
+    # to extend into before reaching window_sec, so their span (and thus
+    # `count`) is inherently shorter than an interior window's -- down to
+    # a single SAMPLE_INTERVAL_SEC-wide sliver. Nothing above scores these
+    # any differently from a real window_sec-long window, so a lucky
+    # high-scoring frame right at the clip's tail could otherwise win out
+    # over every genuine full-length candidate and get exported as a
+    # near-zero-length "best segment". `duration > window_sec` is already
+    # guaranteed here (see the early return above), so at least one
+    # candidate (starting at i=0) always reaches the true max span --
+    # restricting to only those candidates is always safe.
+    if candidates:
+        max_count = max(c[3] for c in candidates)
+        full_candidates = [c for c in candidates if c[3] >= max_count]
+        if full_candidates:
+            candidates = full_candidates
+    candidates = [(avg, i, j) for avg, i, j, _count in candidates]
 
     # Greedy non-max suppression: take the best-scoring candidate, then
     # repeatedly take the next-best one that doesn't overlap (with a

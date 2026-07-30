@@ -101,6 +101,16 @@ DEFAULT_OPTIONS = {
     "max_workers": 3,
 }
 
+# Below this, a clip's own full duration is shorter than any segment could
+# usefully be -- e.g. an accidental "record then immediately stop" take.
+# analyzer.py reports these accurately (real, correctly-decoded footage,
+# not a decode failure), so this is a suite-side display/export filter
+# rather than a fix to the analyzer itself: too-short clips are shown as
+# an error-style card (no segment chips, can't be selected) instead of a
+# normal result whose "best segment" is really just the whole unusable
+# clip.
+MIN_USABLE_DURATION_SEC = 1.0
+
 
 def read_options(params):
     """Merge request params over the defaults, coercing types defensively —
@@ -189,6 +199,10 @@ def _thumbnail_data_uri(result):
 
 def clip_payload(result):
     """The JSON shape the suite frontend renders in its results grid."""
+    error = result.error
+    if error is None and result.duration < MIN_USABLE_DURATION_SEC:
+        error = (f"Clip is only {result.duration:.1f}s long — too short to "
+                 "use as b-roll.")
     return {
         "path": result.path,
         "filename": result.filename,
@@ -202,7 +216,7 @@ def clip_payload(result):
         "segments": [{"start": s.start, "end": s.end, "score": s.score}
                      for s in (result.segments or [])],
         "thumbnail_data_uri": _thumbnail_data_uri(result),
-        "error": result.error,
+        "error": error,
     }
 
 
@@ -232,6 +246,14 @@ def rebuild_from_cache(folder, options, paths_filter=None):
                 min_segment_gap_sec=options["min_segment_gap_sec"],
                 energy_weight=options["energy_weight"],
                 enable_energy=options["enable_energy"])
+            # A too-short clip never has selectable chips in the UI (see
+            # clip_payload), so it can only reach here via an "export
+            # everything" run (wanted is None) rather than an explicit
+            # pick — keep it out of the XML the same way it's kept out of
+            # the results grid.
+            if wanted is None and result.error is None \
+                    and result.duration < MIN_USABLE_DURATION_SEC:
+                continue
             results.append(result)
         except Exception:
             continue  # unusable entry — skip rather than fail the export

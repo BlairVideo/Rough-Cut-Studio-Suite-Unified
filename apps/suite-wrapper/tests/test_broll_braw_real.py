@@ -72,7 +72,14 @@ def test_braw_start_without_preexisting_proxy_does_not_race(api, tmp_path):
         job = _wait_for_job(api, start["job_id"], timeout=120.0)
         assert job["status"] == "done", job
         clip = job["result"]["clips"][0]
-        assert clip["error"] is None, clip["error"]
+        # The SDK's sample.braw is itself a single-frame (~67ms) demo clip --
+        # shorter than broll_worker.MIN_USABLE_DURATION_SEC, so it now
+        # (correctly) surfaces as a "too short to use" card rather than a
+        # decode error. The race this test actually covers (the analyze
+        # subprocess starting before its proxy job finishes) is still fully
+        # exercised: reaching a non-decode-failure error at all proves the
+        # proxy resolved and decoding succeeded.
+        assert clip["error"] is not None and "too short" in clip["error"]
         assert clip["path"] == clip_path
         assert clip["duration"] > 0
     finally:
@@ -118,7 +125,14 @@ def test_braw_clip_analyzes_end_to_end_through_broll_workspace(api, tmp_path):
         clips = broll_job["result"]["clips"]
         assert len(clips) == 1
         clip = clips[0]
-        assert clip["error"] is None, clip["error"]
+        # The SDK's sample.braw is itself a single-frame (~67ms) demo clip --
+        # shorter than broll_worker.MIN_USABLE_DURATION_SEC, so it now
+        # (correctly) surfaces as a "too short to use" card. That's a
+        # genuine, intentional filter (a real accidental sub-second take
+        # shouldn't show up as a normal, selectable b-roll result either),
+        # not a decode failure -- clip["path"]/["duration"] below are
+        # unaffected by it.
+        assert clip["error"] is not None and "too short" in clip["error"]
         assert clip["path"] == clip_path, "must reference the ORIGINAL .braw path, not the proxy"
         assert clip["duration"] > 0
         # NOT asserting thumbnail_data_uri here: the SDK's sample.braw is a
@@ -150,7 +164,8 @@ def test_braw_clip_analyzes_end_to_end_through_broll_workspace(api, tmp_path):
         second_job = _wait_for_job(api, second_start["job_id"])
         assert second_job["status"] == "done", second_job
         assert second_job["result"]["clips"][0]["path"] == clip_path
-        assert second_job["result"]["clips"][0]["error"] is None
+        second_clip_error = second_job["result"]["clips"][0]["error"]
+        assert second_clip_error is not None and "too short" in second_clip_error
     finally:
         # Leave no trace in the real assets/proxies/ dir.
         proxy_path = braw_proxy_cache.find_cached_proxy(clip_path)
@@ -200,7 +215,13 @@ def test_braw_clip_export_xml_end_to_end(api, tmp_path):
 
         output_path = str(tmp_path / "Best B-Roll Selects.xml")
         api.window = _FakeWindow(output_path)
-        export_res = api.broll_export_xml(start["job_id"])
+        # The SDK's sample.braw is itself a single-frame (~67ms) demo clip,
+        # below broll_worker.MIN_USABLE_DURATION_SEC -- an "export
+        # everything" call (selected_paths=None) now excludes it, same as
+        # it's excluded from the results grid. Explicitly selecting it (the
+        # same path a user's checked-chip selection takes) still exercises
+        # the export pipeline this test actually targets.
+        export_res = api.broll_export_xml(start["job_id"], selected_paths=[clip_path])
         assert export_res["ok"], export_res
         assert export_res["path"] == output_path
         assert os.path.isfile(output_path)

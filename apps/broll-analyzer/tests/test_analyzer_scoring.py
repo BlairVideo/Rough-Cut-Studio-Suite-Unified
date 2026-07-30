@@ -214,6 +214,29 @@ class TestSegmentSelectionLongClips:
             assert seg.end <= result.duration
             assert seg.start >= 0.0
 
+    def test_short_boundary_window_does_not_beat_a_real_full_length_window(self):
+        # 40 samples, 0.5s apart -> 20s clip. Every sample is mediocre
+        # except the very LAST one, which is a standout still frame --
+        # the two-pointer sweep's window starting there can only span a
+        # single SAMPLE_INTERVAL_SEC (there's no more clip to extend
+        # into), not a real window_sec-long window. That sliver must not
+        # be selected as the "best segment" just because it scores well
+        # in isolation -- a genuine window_sec-long window elsewhere in
+        # the clip should win instead.
+        result = make_result(40, duration=20.0)
+        for i, s in enumerate(result.samples):
+            s.exposure = 50.0
+            s.motion_jitter = 5.0
+            s.sharpness = 100.0 if i == 39 else 50.0
+        rescore_clip(result, window_sec=4.0, max_segments=1, enable_energy=False)
+        assert len(result.segments) == 1
+        seg = result.segments[0]
+        length = seg.end - seg.start
+        # A real window is ~window_sec (+SAMPLE_INTERVAL_SEC padding on
+        # the last sample) long; the boundary sliver would be ~0.5s.
+        assert length >= 4.0
+        assert not (seg.start == pytest.approx(19.5) and length < 4.0)
+
 
 class TestEnergyWeightGating:
     """Covers analyzer.rescore_clip's `apply_energy = enable_energy and
