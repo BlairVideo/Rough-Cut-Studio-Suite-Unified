@@ -188,6 +188,11 @@ def export_video(scene, out_path, fps=None, codec="mov", extra_logo_sources=None
             proc.stdin.close()
         except (BrokenPipeError, OSError):
             pass
+        # Popen.communicate() unconditionally flushes self.stdin if it's
+        # non-None, even though we just closed it above — raises
+        # "ValueError: flush of closed file". Clearing the reference makes
+        # communicate() skip that stale flush/close attempt entirely.
+        proc.stdin = None
 
     try:
         _, stderr = proc.communicate(timeout=120)
