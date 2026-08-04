@@ -77,7 +77,7 @@ def send_to_resolve(ref_path, take_paths, report, project_name=None, timeline_na
     project open, import rejected, ...)."""
     fcpxml_path = None
     try:
-        fcpxml_path = import_to_resolve.write_fcpxml(report, take_paths, timeline_name)
+        fcpxml_path, width, height = import_to_resolve.write_fcpxml(report, take_paths, timeline_name)
 
         resolve = import_to_resolve.connect_resolve()
         pm = resolve.GetProjectManager()
@@ -95,6 +95,8 @@ def send_to_resolve(ref_path, take_paths, report, project_name=None, timeline_na
                 raise SystemExit(
                     "No project is currently open in Resolve, and no project name was given")
 
+        import_to_resolve.set_project_resolution(project, width, height)
+
         media_pool = project.GetMediaPool()
         timeline = media_pool.ImportTimelineFromFile(fcpxml_path)
         if timeline is None:
@@ -102,6 +104,7 @@ def send_to_resolve(ref_path, take_paths, report, project_name=None, timeline_na
                 "Resolve rejected the generated FCPXML (ImportTimelineFromFile "
                 "returned None) — check Resolve's own import log for details")
 
+        import_to_resolve.apply_timeline_resolution(timeline, width, height)
         import_to_resolve.add_reference_audio(project, timeline, ref_path)
 
         return {"ok": True, "project": project.GetName(), "timeline": timeline.GetName()}

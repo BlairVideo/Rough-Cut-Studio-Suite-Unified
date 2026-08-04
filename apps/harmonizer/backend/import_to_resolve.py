@@ -44,6 +44,10 @@ def connect_resolve():
 
 
 def write_fcpxml(report, take_media, timeline_name=None):
+    """Returns (fcpxml_path, width, height) -- width/height are take 1's
+    real probed dimensions (same values the FCPXML <format> resource
+    itself carries), handed back so the caller can force Resolve's project/
+    timeline resolution to match before import (see apply_timeline_resolution)."""
     take_infos = [make_fcpxml.probe_media(p) for p in take_media]
     fcpxml_el = make_fcpxml.build_fcpxml(report, take_infos, take_media, sequence_name=timeline_name)
 
@@ -55,7 +59,28 @@ def write_fcpxml(report, take_media, timeline_name=None):
     with os.fdopen(fd, "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n')
         f.write(pretty.split("\n", 1)[1] + "\n")
-    return path
+    return path, take_infos[0]["width"], take_infos[0]["height"]
+
+
+def set_project_resolution(project, width, height):
+    """ImportTimelineFromFile does NOT reliably conform Resolve's own
+    resolution settings to the FCPXML <format> resource's width/height --
+    confirmed on real data where a project left at Resolve's default
+    (1920x1080) produced an imported timeline still reporting 1920x1080
+    via GetSetting, even though the FCPXML clip geometry was the source's
+    real (larger) resolution. Call this BEFORE ImportTimelineFromFile so
+    the project's own default already matches the source."""
+    project.SetSetting("timelineResolutionWidth", str(width))
+    project.SetSetting("timelineResolutionHeight", str(height))
+
+
+def apply_timeline_resolution(timeline, width, height):
+    """Belt-and-suspenders after import: a Timeline object only honors its
+    own resolution keys once useCustomSettings is enabled, otherwise it
+    just reads through to the project default set above."""
+    timeline.SetSetting("useCustomSettings", "1")
+    timeline.SetSetting("timelineResolutionWidth", str(width))
+    timeline.SetSetting("timelineResolutionHeight", str(height))
 
 
 def add_reference_audio(project, timeline, ref_media):
@@ -98,7 +123,7 @@ def main():
     args = parser.parse_args()
 
     report = json.load(open(args.report))
-    fcpxml_path = write_fcpxml(report, args.take_media, args.timeline_name)
+    fcpxml_path, width, height = write_fcpxml(report, args.take_media, args.timeline_name)
 
     resolve = connect_resolve()
     pm = resolve.GetProjectManager()
@@ -114,6 +139,8 @@ def main():
         if project is None:
             raise SystemExit("No project is currently open in Resolve, and no --project name was given")
 
+    set_project_resolution(project, width, height)
+
     media_pool = project.GetMediaPool()
     timeline = media_pool.ImportTimelineFromFile(fcpxml_path)
     if timeline is None:
@@ -122,6 +149,7 @@ def main():
             "check Resolve's own import log for details"
         )
 
+    apply_timeline_resolution(timeline, width, height)
     add_reference_audio(project, timeline, args.ref_media)
 
     print(json.dumps({

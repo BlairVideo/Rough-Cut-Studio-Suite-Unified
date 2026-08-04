@@ -67,6 +67,11 @@ def probe_braw(path):
         "audio_rate": info["audio_rate"] if info["has_audio"] else None,
         "audio_channels": info["audio_channels"] if info["has_audio"] else None,
         "tc_start": info["tc_start"],
+        # Blackmagic RAW is captured at native sensor resolution with no
+        # anamorphic desqueeze metadata; ExtractClipInfo exposes no aspect
+        # ratio field, so BRAW sources are always square-pixel.
+        "par_num": 1,
+        "par_den": 1,
     }
 
 
@@ -87,6 +92,19 @@ def probe_media(path):
     # tcStart-mismatch failure mode doesn't resurface for other formats.
     tc_start = (info["format"].get("tags") or {}).get("timecode") or (video or {}).get("tags", {}).get("timecode")
 
+    # ffprobe reports pixel (sample) aspect ratio as "num:den", defaulting
+    # to "0:1" or omitting the field entirely for square-pixel footage.
+    par_num, par_den = 1, 1
+    raw_sar = video.get("sample_aspect_ratio") if video else None
+    if raw_sar and raw_sar != "0:1":
+        num_str, _, den_str = raw_sar.partition(":")
+        try:
+            n, d = int(num_str), int(den_str)
+            if n > 0 and d > 0:
+                par_num, par_den = n, d
+        except ValueError:
+            pass
+
     return {
         "duration": duration,
         "has_video": video is not None,
@@ -97,6 +115,8 @@ def probe_media(path):
         "audio_rate": int(audio["sample_rate"]) if audio else None,
         "audio_channels": int(audio["channels"]) if audio else None,
         "tc_start": tc_start,
+        "par_num": par_num,
+        "par_den": par_den,
     }
 
 
@@ -168,6 +188,7 @@ def build_fcpxml(report, take_infos, take_media_paths, sequence_name=None):
     fmt = sub(
         resources, "format", id="fmt1", name=f"Harmonizer {take_infos[0]['width']}x{take_infos[0]['height']}",
         frameDuration=frame_duration, width=take_infos[0]["width"], height=take_infos[0]["height"],
+        paspH=take_infos[0]["par_num"], paspV=take_infos[0]["par_den"],
     )
 
     take_asset_ids = {}
