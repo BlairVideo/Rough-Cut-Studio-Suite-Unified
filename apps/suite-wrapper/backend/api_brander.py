@@ -90,9 +90,10 @@ class BranderMixin:
         """Import a custom logo: copy the picked PNG/JPEG into
         assets/logos/, register it in brand.LOGO_SOURCES under a unique
         'Custom: <stem>' name, and persist the registry so it survives
-        restarts. The standard white-background keying (assets.
-        load_transparent) applies to imports too — logos supplied on a
-        white background are auto-keyed to transparency."""
+        restarts. White-background keying (assets.load_transparent) is
+        opt-in per scene (scene["logo_key_white_bg"]) and applies to
+        imports exactly as it does to built-in logos — it is NOT applied
+        automatically just because a logo was imported."""
         err = self._require_window()
         if err:
             return err

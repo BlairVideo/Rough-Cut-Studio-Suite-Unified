@@ -4393,6 +4393,8 @@
     $("gxTransparent").checked = !!scene.transparent_bg;
     $("gxDivider").checked = !!scene.divider;
     $("gxLogoGrow").checked = !!scene.logo_grow;
+    $("gxLogoInFront").checked = (scene.logo_arrangement || "back") === "front";
+    $("gxLogoKeyWhite").checked = !!scene.logo_key_white_bg;
     $("gxShadowEnabled").checked = !!scene.shadow_enabled;
     $("gxShadowColor").value = /^#[0-9a-fA-F]{6}$/.test(scene.shadow_color || "") ? scene.shadow_color : "#000000";
 
@@ -4758,6 +4760,8 @@
     bind("gxLogoColorMode", (scene, e) => { scene.logo_color_mode = e.target.value; });
     bind("gxLogoCustomColor", (scene, e) => { scene.logo_custom_color = e.target.value; }, "input");
     bind("gxLogoGrow", (scene, e) => { scene.logo_grow = e.target.checked; });
+    bind("gxLogoInFront", (scene, e) => { scene.logo_arrangement = e.target.checked ? "front" : "back"; });
+    bind("gxLogoKeyWhite", (scene, e) => { scene.logo_key_white_bg = e.target.checked; });
     bind("gxTransparent", (scene, e) => { scene.transparent_bg = e.target.checked; });
     bind("gxDivider", (scene, e) => { scene.divider = e.target.checked; });
     bind("gxShadowEnabled", (scene, e) => { scene.shadow_enabled = e.target.checked; });

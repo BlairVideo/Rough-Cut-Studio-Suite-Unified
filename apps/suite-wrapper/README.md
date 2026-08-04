@@ -141,10 +141,12 @@ never modified):
   and Logo (with outro bars when an outro animation is set), frame-snapped,
   plus a scrubber and Play button — the same control the standalone Brander's
   timeline gives you.
-- **Logo tools** (Graphics): placement select (7 positions), "Import Logo…"
-  for your own PNG/JPEG (white backgrounds auto-keyed; imports persist in
-  `assets/logos/`), and a larger size range (up to 640 px; lower-third scale
-  to 2.0×).
+- **Logo tools** (Graphics): placement select (7 positions), front/back
+  arrangement relative to text, "Import Logo…" for your own PNG/JPEG
+  (imports persist in `assets/logos/`), an opt-in "Key out white
+  background to transparency" checkbox for logos flattened onto a plain
+  white background, and a larger size range (up to 640 px; lower-third
+  scale to 2.0×).
 - **AI titles — Local or Gemini** (Graphics): the prompt bar has two modes.
   *Local* is the original offline keyword interpreter. *Gemini* sends your
   prompt plus the current scene to the Gemini API for more dynamic

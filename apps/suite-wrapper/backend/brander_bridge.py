@@ -151,8 +151,9 @@ def register_custom_logo(src_path):
     """Copy `src_path` into assets/logos/, register it under a unique
     'Custom: <stem>' display name, persist the registry, and return the
     display name. Raises on I/O failure (callers wrap into their error
-    contract). The white-background keying in assets.load_transparent
-    applies to these imports exactly as it does to built-in logos."""
+    contract). The opt-in white-background keying in
+    assets.load_transparent (scene["logo_key_white_bg"]) applies to these
+    imports exactly as it does to built-in logos."""
     src_path = os.path.abspath(src_path)
     if not os.path.isfile(src_path):
         raise FileNotFoundError(f"Logo file not found: {src_path}")
@@ -190,6 +191,8 @@ def default_scene():
         "logo_height": 160,
         "logo_opacity": 100,
         "logo_grow": False,
+        "logo_arrangement": "back",
+        "logo_key_white_bg": False,
         "title_size": 130,
         "subtitle_size": 46,
         "transparent_bg": True,

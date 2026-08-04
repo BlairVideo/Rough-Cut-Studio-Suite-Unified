@@ -5536,3 +5536,96 @@ shell (as opposed to a stubbed-API browser check) still has not been
 performed — everything above was verified as rigorously as this
 sandboxed environment allows, but a first real launch is still worth a
 quick manual pass.
+
+# Addendum v61 — fix: Blair Brander logo painted in front of title/divider/subtitle
+
+The logo was always the *last* `Image.alpha_composite()` call in
+`renderer.render_frame()`, so it visually covered the title, accent
+divider, and subtitle whenever their positions overlapped (most visibly
+with `logo_placement: "center"` or a tall `logo_height` in the "Full
+Title Card" layout). There was no z-order concept anywhere in the scene
+dict to control this — the stacking order was 100% implicit in the
+sequence of composite calls.
+
+**Renderer**: new scene field `logo_arrangement` (`"back"` default |
+`"front"`). `render_frame()` now builds the logo layer (image load,
+grow/opacity/alpha, wipe mask — all the same per-frame math as before)
+right after layout geometry is resolved, but composites it in one of two
+places: immediately, before the title/divider/subtitle layers, when
+`logo_arrangement` is `"back"`; or after the subtitle layer (the old,
+now non-default position) when it's `"front"`. Nothing about the logo's
+own animation timing, positioning, or shadow (`_composite_with_shadow`)
+changed — only *when* in the compositing sequence it happens.
+
+**Default changed, not just added**: `"back"` is the new default in
+both `default_scene()` copies (`apps/blair-brander/app.py` and
+`apps/suite-wrapper/backend/brander_bridge.py`, kept in sync per this
+file's own rule, enforced by `tests/test_sibling_drift.py`) — this
+directly fixes the reported bug for every new scene without requiring
+the user to also flip a control. Existing saved `.blairtitle` projects
+without the key pick up `"back"` too via `scene.get(...)`, which changes
+their rendered look; there was no way to fix the default bug otherwise
+without leaving it broken for anyone who doesn't know to change a
+setting.
+
+**Suite Wrapper only** (no standalone Tkinter control, matching the
+existing `logo_grow` precedent — that field has also always been
+Suite-Wrapper-only, no `app.py` UI): new "Bring logo in front of text &
+accent" checkbox (`gxLogoInFront`) in the Graphics workspace's Logo
+block in `shell.html`, wired in `suite.js`'s `renderFormFromScene`
+(`$("gxLogoInFront").checked = (scene.logo_arrangement || "back") ===
+"front"`) and `bind()` registrations
+(`scene.logo_arrangement = e.target.checked ? "front" : "back"`).
+
+**Verified**: rendered both arrangements via `renderer.render_frame()`
+directly (title/divider now paint over the logo by default; checking
+the box restores the old front-of-logo look), confirmed byte-different
+output between the two, and ran the full `apps/suite-wrapper` pytest
+suite (303 passed, 3 skipped) including `test_sibling_drift.py`.
+
+# Addendum v62 — fix: white-background logo keying is now opt-in, not automatic
+
+`assets.load_transparent()`'s white-background keying was a flat
+per-pixel test (`min(r, g, b) >= threshold`) applied to every logo on
+every render, unconditionally. Because it's flat rather than flood-fill
+from the border, it punches transparency through ANY near-white pixel
+in the whole image — not just an actual white background — which eats
+legitimate white details (lettering, a white ring/border) inside logos
+that already carry their own real alpha channel. There was no way to
+turn it off.
+
+**assets.py**: `load_transparent()` / `load_white_knockout()` /
+`recolor()` all gained a `key_white` parameter, default `False` (was:
+always on). The keying branch and its `_cache_key`/cache-key tuples now
+condition on it, so keyed and unkeyed results cache independently.
+Module docstring updated — it no longer claims keying happens "at load
+time" unconditionally.
+
+**Renderer**: new scene field `logo_key_white_bg` (bool, default
+`False`, added to both `default_scene()` copies same as `logo_arrangement`
+in v61). `render_frame()` reads it once and threads it into whichever of
+the three `assets.*` calls the current `logo_color_mode` needs.
+
+**Standalone app** (`apps/blair-brander/app.py`): new "Key out white
+background to transparency" `ttk.Checkbutton` in the Logo panel (after
+the custom-color row), backed by `self.logo_key_white_var`, wired into
+`_sync_controls_from_scene`/`_sync_scene_from_controls` the same way as
+every other logo checkbox.
+
+**Suite Wrapper**: mirrored in `brander_bridge.default_scene()` (kept in
+sync per `test_sibling_drift.py`) and a matching `gxLogoKeyWhite`
+checkbox in the Graphics workspace's Logo block in `shell.html`, wired
+in `suite.js` (`renderFormFromScene` / `bind`). The old "Logos on a
+white background are auto-keyed to transparency" hint text under
+"Import Logo…" was removed since it's no longer true by default.
+Stale doc comments in `api_brander.py`'s `brander_import_logo` and
+`brander_bridge.py`'s `register_custom_logo` (both claimed automatic
+keying) updated to describe the opt-in behavior.
+
+**Verified**: rendered the same logo with the flag on vs. off (default)
+directly through `renderer.render_frame()` — confirmed byte-different
+output — and with `logo_color_mode` set to each of `original`/`white`/
+`custom` to confirm the flag threads through all three code paths
+without error. Ran the full `apps/suite-wrapper` pytest suite (303
+passed, 3 skipped, including `test_sibling_drift.py`) and
+`python3 -m py_compile` on the touched standalone-app files.

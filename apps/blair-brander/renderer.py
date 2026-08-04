@@ -610,6 +610,95 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
         text_x = 0
         cx = cx + text_offset_x
 
+    # ---- Logo (built here, composited either before or after the text
+    # layers below depending on scene["logo_arrangement"]) -----------------
+    logo_layer = None
+    logo_name = scene.get("logo")
+    if logo_name and logo_name != "None":
+        color_mode = scene.get("logo_color_mode", "original")
+        key_white = scene.get("logo_key_white_bg", False)
+        if color_mode == "white":
+            logo_img = assets.load_white_knockout(logo_name, key_white=key_white)
+        elif color_mode == "custom":
+            logo_img = assets.recolor(logo_name, scene.get("logo_custom_color", "#ffffff"), key_white=key_white)
+        else:
+            logo_img = assets.load_transparent(logo_name, key_white=key_white)
+
+        logo_h = scene.get("logo_height", 160)
+        logo_h = min(logo_h, int(H * 0.85))
+        logo_img = assets.fit_height(logo_img, logo_h)
+
+        if scene.get("logo_grow"):
+            # Subtle, slow scale-up that keeps easing from 1.0x to a
+            # modest +8% across the ENTIRE clip, starting at 0:00 (not
+            # gated on the logo's own entrance timing) through the hold
+            # tail (see elapsed_seconds' docstring on render_frame for
+            # why t alone can't express animating through the hold tail).
+            # The logo itself may still be invisible (logo_alpha == 0)
+            # for part of that window — it's just already mid-grow by
+            # the time it fades/slides in, rather than popping in at
+            # 1.0x and only starting to grow afterward. Applied BEFORE
+            # lw/lh/positions are computed below so the logo grows
+            # outward from whichever point its placement already anchors
+            # (its own center for a "-center"/"center" placement, the
+            # margin corner otherwise) rather than drifting toward one
+            # corner.
+            if elapsed_seconds is None:
+                # No real-time info available (a caller that only knows
+                # t, e.g. render_still's single settled snapshot) — fall
+                # back to the old t-only behavior: growth confined to the
+                # pre-hold window, capped once t reaches 1.0.
+                grow_p = phase_progress(0.0, 1.0, t)
+            else:
+                total_life_s = max(0.1, scene.get("duration", 3.0)) + max(0.0, scene.get("hold_seconds", 1.0))
+                grow_p = phase_progress(0.0, total_life_s, elapsed_seconds)
+            grow_scale = 1.0 + 0.08 * ease_out_cubic(grow_p)
+            if grow_scale != 1.0:
+                gw, gh = logo_img.size
+                logo_img = logo_img.resize(
+                    (max(1, round(gw * grow_scale)), max(1, round(gh * grow_scale))),
+                    Image.LANCZOS)
+
+        lw, lh = logo_img.size
+        margin = max(30, int(W * 0.03))
+        placement = scene.get("logo_placement", "bottom-center")
+        positions = {
+            "top-left": (margin, margin),
+            "top-right": (W - lw - margin, margin),
+            "top-center": (cx - lw / 2, margin),
+            "bottom-left": (margin, H - lh - margin),
+            "bottom-right": (W - lw - margin, H - lh - margin),
+            "bottom-center": (cx - lw / 2, H - lh - margin),
+            "center": (cx - lw / 2, cy - lh / 2),
+        }
+        lx, ly = positions.get(placement, positions["bottom-center"])
+        ly += logo_dy
+
+        if logo_alpha < 1.0:
+            r, g, b, a = logo_img.split()
+            a = a.point(lambda v: int(v * logo_alpha))
+            logo_img.putalpha(a)
+
+        logo_opacity = clamp01(scene.get("logo_opacity", 100) / 100.0)
+        if logo_opacity < 1.0:
+            r, g, b, a = logo_img.split()
+            a = a.point(lambda v: int(v * logo_opacity))
+            logo_img.putalpha(a)
+
+        logo_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        logo_layer.paste(logo_img, (int(lx), int(ly)), logo_img)
+        if logo_wipe_out_frac < 1.0:
+            logo_layer = apply_wipe_mask(logo_layer, logo_wipe_out_frac, W, H)
+
+    # "back" (default) tucks the logo behind the title/divider/subtitle so
+    # it can't visually collide with the text; "front" restores the older
+    # always-on-top behavior for layouts where a badge-style logo overlap
+    # is wanted.
+    logo_arrangement = scene.get("logo_arrangement", "back")
+    if logo_layer is not None and logo_arrangement == "back":
+        canvas = _composite_with_shadow(canvas, logo_layer)
+        draw = ImageDraw.Draw(canvas)
+
     # ---- Title layer -------------------------------------------------
     title_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     tl_draw = ImageDraw.Draw(title_layer)
@@ -677,82 +766,9 @@ def render_frame(scene, t=1.0, elapsed_seconds=None):
             sub_layer = apply_wipe_mask(sub_layer, subtitle_wipe_out_frac, W, H)
         canvas = _composite_with_shadow(canvas, sub_layer)
 
-    # ---- Logo -----------------------------------------------------------
-    logo_name = scene.get("logo")
-    if logo_name and logo_name != "None":
-        color_mode = scene.get("logo_color_mode", "original")
-        if color_mode == "white":
-            logo_img = assets.load_white_knockout(logo_name)
-        elif color_mode == "custom":
-            logo_img = assets.recolor(logo_name, scene.get("logo_custom_color", "#ffffff"))
-        else:
-            logo_img = assets.load_transparent(logo_name)
-
-        logo_h = scene.get("logo_height", 160)
-        logo_h = min(logo_h, int(H * 0.85))
-        logo_img = assets.fit_height(logo_img, logo_h)
-
-        if scene.get("logo_grow"):
-            # Subtle, slow scale-up that keeps easing from 1.0x to a
-            # modest +8% across the ENTIRE clip, starting at 0:00 (not
-            # gated on the logo's own entrance timing) through the hold
-            # tail (see elapsed_seconds' docstring on render_frame for
-            # why t alone can't express animating through the hold tail).
-            # The logo itself may still be invisible (logo_alpha == 0)
-            # for part of that window — it's just already mid-grow by
-            # the time it fades/slides in, rather than popping in at
-            # 1.0x and only starting to grow afterward. Applied BEFORE
-            # lw/lh/positions are computed below so the logo grows
-            # outward from whichever point its placement already anchors
-            # (its own center for a "-center"/"center" placement, the
-            # margin corner otherwise) rather than drifting toward one
-            # corner.
-            if elapsed_seconds is None:
-                # No real-time info available (a caller that only knows
-                # t, e.g. render_still's single settled snapshot) — fall
-                # back to the old t-only behavior: growth confined to the
-                # pre-hold window, capped once t reaches 1.0.
-                grow_p = phase_progress(0.0, 1.0, t)
-            else:
-                total_life_s = max(0.1, scene.get("duration", 3.0)) + max(0.0, scene.get("hold_seconds", 1.0))
-                grow_p = phase_progress(0.0, total_life_s, elapsed_seconds)
-            grow_scale = 1.0 + 0.08 * ease_out_cubic(grow_p)
-            if grow_scale != 1.0:
-                gw, gh = logo_img.size
-                logo_img = logo_img.resize(
-                    (max(1, round(gw * grow_scale)), max(1, round(gh * grow_scale))),
-                    Image.LANCZOS)
-
-        lw, lh = logo_img.size
-        margin = max(30, int(W * 0.03))
-        placement = scene.get("logo_placement", "bottom-center")
-        positions = {
-            "top-left": (margin, margin),
-            "top-right": (W - lw - margin, margin),
-            "top-center": (cx - lw / 2, margin),
-            "bottom-left": (margin, H - lh - margin),
-            "bottom-right": (W - lw - margin, H - lh - margin),
-            "bottom-center": (cx - lw / 2, H - lh - margin),
-            "center": (cx - lw / 2, cy - lh / 2),
-        }
-        lx, ly = positions.get(placement, positions["bottom-center"])
-        ly += logo_dy
-
-        if logo_alpha < 1.0:
-            r, g, b, a = logo_img.split()
-            a = a.point(lambda v: int(v * logo_alpha))
-            logo_img.putalpha(a)
-
-        logo_opacity = clamp01(scene.get("logo_opacity", 100) / 100.0)
-        if logo_opacity < 1.0:
-            r, g, b, a = logo_img.split()
-            a = a.point(lambda v: int(v * logo_opacity))
-            logo_img.putalpha(a)
-
-        logo_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        logo_layer.paste(logo_img, (int(lx), int(ly)), logo_img)
-        if logo_wipe_out_frac < 1.0:
-            logo_layer = apply_wipe_mask(logo_layer, logo_wipe_out_frac, W, H)
+    # ---- Logo (front arrangement only — "back" was already composited
+    # above, before the title/divider/subtitle layers) ---------------------
+    if logo_layer is not None and logo_arrangement != "back":
         canvas = _composite_with_shadow(canvas, logo_layer)
 
     # ---- Vignette (applied last so it darkens the whole composite) -------

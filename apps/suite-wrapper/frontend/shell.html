@@ -729,7 +729,11 @@
         <label class="suite-field" id="gxLogoCustomRow" hidden><span>Custom logo color</span><input type="color" id="gxLogoCustomColor" value="#ffffff" /></label>
         <label class="suite-field"><span>Logo placement</span><select id="gxLogoPlacement"></select></label>
         <button class="suite-btn suite-btn--ghost" id="gxImportLogo">Import Logo…</button>
-        <p class="suite-hint suite-hint--tight">PNG or JPEG. Logos on a white background are auto-keyed to transparency.</p>
+        <p class="suite-hint suite-hint--tight">PNG or JPEG.</p>
+        <label class="suite-check">
+          <input type="checkbox" id="gxLogoKeyWhite" />
+          <span>Key out white background to transparency</span>
+        </label>
         <label class="suite-field suite-field--slider">
           <span>Logo height <em id="gxLogoHeightVal">160px</em></span>
           <input type="range" id="gxLogoHeight" min="40" max="900" step="4" value="160" />
@@ -741,6 +745,10 @@
         <label class="suite-check">
           <input type="checkbox" id="gxLogoGrow" />
           <span>Slow subtle scale-up after intro</span>
+        </label>
+        <label class="suite-check">
+          <input type="checkbox" id="gxLogoInFront" />
+          <span>Bring logo in front of text &amp; accent</span>
         </label>
       </div>
 

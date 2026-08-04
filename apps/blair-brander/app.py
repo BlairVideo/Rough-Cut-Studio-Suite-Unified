@@ -61,6 +61,8 @@ def default_scene():
         "logo_height": 160,
         "logo_opacity": 100,
         "logo_grow": False,
+        "logo_arrangement": "back",
+        "logo_key_white_bg": False,
         "title_size": 130,
         "subtitle_size": 46,
         "transparent_bg": True,
@@ -546,6 +548,10 @@ class BlairTitleApp:
         ttk.Button(self.logo_custom_color_row, text="Brand color…",
                    command=lambda: self.pick_brand_color("logo_custom_color", self.logo_custom_color_swatch)).pack(side="left")
         self.color_swatches["logo_custom_color"] = self.logo_custom_color_swatch
+        self.logo_key_white_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(lf, text="Key out white background to transparency",
+                        variable=self.logo_key_white_var,
+                        command=self.on_change).pack(fill="x", padx=8, pady=(0, 6))
         ttk.Label(lf, text=brand.TRADEMARK_NOTICE, wraplength=370, style="Accent.TLabel").pack(fill="x", padx=8, pady=(0, 8))
 
         af = ttk.LabelFrame(f, text="Animation")
@@ -639,6 +645,7 @@ class BlairTitleApp:
             self.logo_var.set(s.get("logo") or "None")
             self.placement_var.set(s.get("logo_placement", "bottom-center"))
             self.logo_color_mode_var.set(s.get("logo_color_mode", "original"))
+            self.logo_key_white_var.set(bool(s.get("logo_key_white_bg", False)))
             self.logo_scale_var.set(int(s.get("logo_height", 160)))
             self.logo_opacity_var.set(int(s.get("logo_opacity", 100)))
             self.anim_var.set(s.get("animation", "fade"))
@@ -697,6 +704,7 @@ class BlairTitleApp:
         s["logo"] = self.logo_var.get()
         s["logo_placement"] = self.placement_var.get()
         s["logo_color_mode"] = self.logo_color_mode_var.get()
+        s["logo_key_white_bg"] = self.logo_key_white_var.get()
         s["logo_height"] = int(self.logo_scale_var.get())
         s["logo_opacity"] = int(self.logo_opacity_var.get())
         s["animation"] = self.anim_var.get()

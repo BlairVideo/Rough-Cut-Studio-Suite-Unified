@@ -204,8 +204,13 @@ tool — there's no additional sign-off step baked into the app.
 - **Seals/logos**: several of the source PNGs provided (the "white" and
   "_KO" knockout variants) were flattened with a plain white background
   and no alpha channel, so they render blank. Rather than ship broken
-  assets, the app derives clean transparent and white-knockout versions
-  **on the fly** from the working full-color artwork — see `assets.py`.
+  assets, the app can derive clean transparent and white-knockout
+  versions **on the fly** from the working full-color artwork — see
+  `assets.py`. White-background keying is an opt-in checkbox in the Logo
+  panel ("Key out white background to transparency"), not automatic —
+  a flat white-pixel test can otherwise eat legitimate white details
+  inside a logo that already has real transparency, so only turn it on
+  for a logo you know is flattened onto a plain white background.
 
 ## 5. The AI prompt bar — how it actually works
 
