@@ -85,7 +85,27 @@ CARDEATER_DB = os.path.join(ASSETS_DIR, "cardeater.sqlite3")
 # app_data_dir it's given -- same convention as the standalone Tauri app's
 # own OS-provided app-data directory, just relocated under this suite's
 # own assets/ tree).
-SPYGLASS_APP_DATA_DIR = os.path.join(ASSETS_DIR, "spyglass")
+#
+# Deliberate exception to this file's usual "never hardcode, always derive
+# from this file's own location" rule: the default below is the "Rough Cut
+# Studio Suite - Unified" checkout's own assets/spyglass/ folder specifically
+# (not this file's own SUITE_DIR/ASSETS_DIR), because that is the real,
+# actively-indexed Spyglass DB -- confirmed as such, not the standalone
+# Spyglass.app's separate OS-level index at
+# ~/Library/Application Support/edu.blair.spyglass/, which is not in active
+# use. Hardcoding it here means every OTHER checkout of this repo (e.g. a
+# themed working copy) defaults to sharing that same real index instead of
+# each starting from its own empty one and re-scanning the whole archive.
+# The Unified checkout itself still resolves to this same folder either way,
+# since it's the same path. STUDIO_SUITE_SPYGLASS_APP_DATA_DIR overrides this
+# (same override-env-var convention as braw_proxy_cache.py's
+# STUDIO_SUITE_PROXY_CACHE_MAX_BYTES) for the rare case a checkout wants its
+# own fully independent index instead.
+_SPYGLASS_APP_DATA_DIR_ENV = "STUDIO_SUITE_SPYGLASS_APP_DATA_DIR"
+_UNIFIED_SPYGLASS_APP_DATA_DIR = (
+    "/Users/cj/Developer/Blair/Rough Cut Studio Suite - Unified/apps/suite-wrapper/assets/spyglass"
+)
+SPYGLASS_APP_DATA_DIR = os.environ.get(_SPYGLASS_APP_DATA_DIR_ENV) or _UNIFIED_SPYGLASS_APP_DATA_DIR
 
 # Colorize workspace: JSON sidecars, matching every other workspace's
 # storage convention (no shared SQLite/settings system exists in this
